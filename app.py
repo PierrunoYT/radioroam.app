@@ -81,19 +81,48 @@ class TuneInAPI:
         supported = {"mp3": 0, "aac": 1, "aacp": 1, "ogg": 2, "opus": 2}
         streams = []
         for item in data.get("body", []):
-            stream_url = item.get("url") or item.get("URL")
-            media_type = str(item.get("media_type", "")).lower()
-            if stream_url and media_type in supported:
-                streams.append(
-                    (
-                        not stream_url.startswith("https://"),
-                        supported[media_type],
-                        -int(item.get("reliability") or 0),
-                        -int(item.get("bitrate") or 0),
-                        stream_url,
+            for candidate in self._resolve_proxy_stream(item):
+                stream_url = candidate.get("url") or candidate.get("URL")
+                media_type = str(candidate.get("media_type", "")).lower()
+                if not stream_url or media_type not in supported:
+                    continue
+
+                urls = [stream_url]
+                if stream_url.startswith("http://"):
+                    urls.insert(0, f"https://{stream_url.removeprefix('http://')}")
+                for url in urls:
+                    streams.append(
+                        (
+                            not url.startswith("https://"),
+                            supported[media_type],
+                            -int(candidate.get("reliability") or 0),
+                            -int(candidate.get("bitrate") or 0),
+                            url,
+                        )
                     )
-                )
         return list(dict.fromkeys(stream[-1] for stream in sorted(streams)))
+
+    def _resolve_proxy_stream(self, item: dict) -> list[dict]:
+        is_proxy = str(item.get("is_proxy", "false")).lower() == "true"
+        if not is_proxy:
+            return [item]
+
+        proxy_url = item.get("url") or item.get("URL")
+        if not proxy_url:
+            return []
+        response = self.session.get(proxy_url, timeout=12)
+        response.raise_for_status()
+        resolved = []
+        for stream in response.json().get("Streams", []):
+            resolved.append(
+                {
+                    "url": stream.get("Url"),
+                    "media_type": stream.get("MediaType"),
+                    "reliability": stream.get("Reliability"),
+                    "bitrate": stream.get("Bandwidth"),
+                }
+            )
+        return resolved
 
     def get_stream_url(self, station_id: str) -> str | None:
         streams = self.get_stream_urls(station_id)
