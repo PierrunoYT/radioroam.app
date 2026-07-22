@@ -6,11 +6,16 @@ const artwork = document.querySelector('#artwork');
 const favoriteButton = document.querySelector('#favorite-current');
 const favoritesNav = document.querySelector('#favorites-button');
 const volume = document.querySelector('#volume');
+const favoritesKey = 'radio-roam-favorites';
 
 let stations = [];
 let currentIndex = -1;
 let currentStation = null;
-let favorites = JSON.parse(localStorage.getItem('radio-player-favorites') || '[]');
+let favorites = JSON.parse(
+  localStorage.getItem(favoritesKey) ||
+  localStorage.getItem('radio-player-favorites') ||
+  '[]'
+);
 let toastTimer;
 let streamCandidates = [];
 let streamCandidateIndex = -1;
@@ -110,7 +115,7 @@ function toggleFavorite() {
     favorites.push(currentStation);
     showToast('Saved to favorites');
   }
-  localStorage.setItem('radio-player-favorites', JSON.stringify(favorites));
+  localStorage.setItem(favoritesKey, JSON.stringify(favorites));
   updatePlayer();
 }
 
