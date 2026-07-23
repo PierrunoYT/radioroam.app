@@ -138,6 +138,16 @@ def index():
     return render_template("index.html")
 
 
+@app.get("/privacy")
+def privacy():
+    return render_template("legal.html", page="privacy")
+
+
+@app.get("/terms")
+def terms():
+    return render_template("legal.html", page="terms")
+
+
 @app.get("/api/search")
 def search():
     query = request.args.get("q", "").strip()

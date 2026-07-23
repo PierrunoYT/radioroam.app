@@ -21,7 +21,7 @@
 
     <main class="app-shell">
       <header class="topbar">
-        <a class="brand" href="#" aria-label="Radio Roam home">
+        <a class="brand" href="{{ url_for('index') }}" aria-label="Radio Roam home">
           <span class="brand-mark"><i></i><i></i><i></i></span>
           <span>Radio<span class="brand-dot"> Roam</span></span>
         </a>
@@ -110,7 +110,7 @@
 
       <footer class="site-footer">
         <div class="footer-intro">
-          <a class="brand" href="#" aria-label="Radio Roam home">
+          <a class="brand" href="{{ url_for('index') }}" aria-label="Radio Roam home">
             <span class="brand-mark"><i></i><i></i><i></i></span>
             <span>Radio<span class="brand-dot"> Roam</span></span>
           </a>
@@ -141,8 +141,8 @@
         <div class="footer-bottom">
           <span>© 2026 Radio Roam</span>
           <div>
-            <a href="#">Privacy</a>
-            <a href="#">Terms</a>
+            <a href="{{ url_for('privacy') }}">Privacy</a>
+            <a href="{{ url_for('terms') }}">Terms</a>
           </div>
           <span>Made for curious ears</span>
         </div>
