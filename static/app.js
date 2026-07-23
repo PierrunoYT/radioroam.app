@@ -7,6 +7,8 @@ const favoriteButton = document.querySelector('#favorite-current');
 const favoritesNav = document.querySelector('#favorites-button');
 const volume = document.querySelector('#volume');
 const favoritesKey = 'radio-roam-favorites';
+const themeKey = 'radio-roam-theme';
+const themeToggle = document.querySelector('#theme-toggle');
 
 let stations = [];
 let currentIndex = -1;
@@ -20,6 +22,21 @@ let toastTimer;
 let streamCandidates = [];
 let streamCandidateIndex = -1;
 let shouldBePlaying = false;
+
+function updateThemeToggle() {
+  const isDark = document.documentElement.dataset.theme === 'dark';
+  themeToggle.setAttribute('aria-pressed', String(isDark));
+  themeToggle.setAttribute('aria-label', `Switch to ${isDark ? 'light' : 'dark'} mode`);
+  document.querySelector('meta[name="theme-color"]').content = isDark ? '#171716' : '#e9e6e1';
+}
+
+themeToggle.addEventListener('click', () => {
+  const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem(themeKey, theme);
+  updateThemeToggle();
+});
+updateThemeToggle();
 
 function escapeHtml(value = '') {
   const element = document.createElement('div');
