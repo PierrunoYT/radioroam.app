@@ -15,115 +15,6 @@ class StationNotFound(LookupError):
     """Raised when Radio-Browser has no station with the requested ID."""
 
 
-# Suffixes where the registrable domain is three labels deep, so "bbc.co.uk"
-# isn't mistaken for the far too broad "co.uk".
-MULTI_LABEL_SUFFIXES = frozenset({
-    "co.uk", "org.uk", "ac.uk", "gov.uk", "co.nz", "co.za", "co.jp", "co.kr",
-    "co.in", "com.au", "net.au", "org.au", "com.br", "com.ar", "com.mx",
-    "com.tr", "com.pl", "com.ua", "com.cn", "com.tw", "com.hk", "com.sg",
-})
-
-
-def registrable_domain(url: str | None) -> str | None:
-    """Reduce a URL to the domain its owner registered ('audio.jam.fm' -> 'jam.fm')."""
-    if not url:
-        return None
-    host = urlsplit(url if "//" in url else f"//{url}").netloc.lower().split(":")[0]
-    labels = [label for label in host.split(".") if label]
-    if len(labels) < 2:
-        return None
-    domain = ".".join(labels[-2:])
-    if domain in MULTI_LABEL_SUFFIXES and len(labels) >= 3:
-        return ".".join(labels[-3:])
-    return domain
-
-
-# Bracketed quality tags: "(AAC 192)", "(128k)", "[aac]", "(MP3)".
-QUALITY_TAG = re.compile(
-    r"[(\[]\s*(?:aac\+?p?|mp3|ogg|opus|flac|hls|hd|sd|stereo"
-    r"|\d{2,3}\s*k?(?:bps)?|[\s,.\-x/])+\s*[)\]]",
-    re.IGNORECASE,
-)
-
-# "Radio" is decoration rather than identity: the same station is listed as
-# "SRF 3", "Radio SRF 3" and "SRF1 Radio".
-STATION_WORD = re.compile(r"\b(?:radio|rádio|radyo)\b", re.IGNORECASE)
-
-
-def normalize_name(name: str) -> str:
-    """Reduce a station name to the part that actually identifies it.
-
-    Broadcasters label the same stream inconsistently - "SRF 3", "Radio SRF 3"
-    and "Radio SRF 3 (AAC 192)" are one station - so the quality tag and the
-    word "radio" are dropped before comparing. Only the tags listed above are
-    stripped: a parenthetical like "(El Centro)" or "(Top 40 & Pop Music)"
-    distinguishes real stations and has to survive.
-
-    Names that are *only* decoration ("Radio", "(128k)") would collapse to an
-    empty string and swallow each other, so those keep their full name.
-    """
-    stripped = STATION_WORD.sub(" ", QUALITY_TAG.sub(" ", name or ""))
-    reduced = re.sub(r"\W+", "", stripped.casefold(), flags=re.UNICODE)
-    return reduced or re.sub(r"\W+", "", (name or "").casefold(), flags=re.UNICODE)
-
-
-def deduplicate(stations: list[dict]) -> list[dict]:
-    """Collapse the bitrate variants Radio-Browser lists as separate stations.
-
-    A stream submitted at several bitrates becomes several entries - searching
-    "srf" returns Radio SRF 3 three times, at 48, 64 and 88 kbps. Grouping on
-    name alone would be far too aggressive, since plenty of unrelated stations
-    share generic names, so a group also has to agree on the operator's domain,
-    taken from the homepage where there is one and the stream host otherwise.
-
-    The highest-bitrate entry wins, and any artwork or homepage its siblings
-    have is copied over - the best-sounding variant is often the one missing a
-    favicon.
-    """
-    by_name: dict[str, list[dict]] = {}
-    for station in stations:
-        by_name.setdefault(normalize_name(station["name"]), []).append(station)
-
-    groups: list[list[dict]] = []
-    for named in by_name.values():
-        # Within one name, cluster by any shared domain. Checking homepage and
-        # stream host together matters because a station's variants often carry
-        # the homepage inconsistently - one entry has it, its twin doesn't.
-        clusters: list[tuple[set[str], list[dict]]] = []
-        for station in named:
-            domains = {
-                registrable_domain(station.get("homepage")),
-                registrable_domain(station.get("url")),
-            }
-            domains.discard(None)
-            match = next((c for c in clusters if c[0] & domains), None)
-            if match is None:
-                clusters.append((domains, [station]))
-            else:
-                match[0].update(domains)
-                match[1].append(station)
-        groups.extend(members for _, members in clusters)
-
-    merged = []
-    for members in groups:
-        best = max(members, key=lambda s: (s.get("bitrate") or 0, s.get("votes") or 0))
-        # The highest-bitrate entry is often the one labelled "(AAC 192)", an
-        # encoding detail rather than a name. Label the group from its most
-        # voted member instead, since that is the entry listeners actually
-        # recognise ("BBC Radio 2" over the same station filed as "bbc 2"),
-        # and drop any quality tag so the label can't advertise a bitrate
-        # different from the stream being played.
-        label = max(members, key=lambda m: (m.get("votes") or 0, -len(m["name"])))
-        cleaned = re.sub(r"\s{2,}", " ", QUALITY_TAG.sub(" ", label["name"])).strip()
-        best["name"] = cleaned or label["name"].strip()
-        if not best.get("image"):
-            best["image"] = next((m["image"] for m in members if m.get("image")), None)
-        if not best.get("homepage"):
-            best["homepage"] = next((m["homepage"] for m in members if m.get("homepage")), None)
-        merged.append(best)
-    return merged
-
-
 class RadioBrowserAPI:
     """Client for the Radio-Browser directory API.
 
@@ -168,7 +59,19 @@ class RadioBrowserAPI:
     def _station(item: dict) -> dict:
         tags = [tag.strip() for tag in (item.get("tags") or "").split(",") if tag.strip()]
         location = item.get("state") or item.get("country")
-        subtext = " · ".join(part for part in (", ".join(tags[:2]), location) if part)
+        # Broadcasters publish the same programme at several bitrates, and
+        # Radio-Browser lists each as its own station, so the same name can
+        # appear repeatedly. Leading with the quality makes those tellable
+        # apart instead of looking like accidental duplicates.
+        quality = " ".join(
+            part for part in (
+                f"{item['bitrate']}k" if item.get("bitrate") else "",
+                (item.get("codec") or "").upper().replace("UNKNOWN", ""),
+            ) if part
+        )
+        subtext = " · ".join(
+            part for part in (quality, ", ".join(tags[:2]), location) if part
+        )
         # Prefer url_resolved: `url` may point at a playlist the browser can't read.
         url = item.get("url_resolved") or item.get("url")
         return {
@@ -186,10 +89,7 @@ class RadioBrowserAPI:
 
     def _stations(self, path: str, params: dict[str, Any] | None = None) -> list[dict]:
         payload = self._get(path, params)
-        stations = [self._station(item) for item in payload if item.get("stationuuid")]
-        # Radio-Browser is ordered by popularity; grouping preserves the order
-        # each station was first seen in, so the ranking survives.
-        return deduplicate(stations)
+        return [self._station(item) for item in payload if item.get("stationuuid")]
 
     def search(self, query: str, limit: int = 60) -> list[dict]:
         return self._stations(
@@ -229,8 +129,12 @@ class TTLCache:
             if entry and now - entry[0] < self.ttl:
                 return entry[1]
         value = produce()
-        with self._lock:
-            self._entries[key] = (now, value)
+        # Don't cache an empty result. Radio-Browser occasionally answers a tag
+        # query with nothing, and storing that would leave a category looking
+        # broken for the full TTL rather than for one request.
+        if value:
+            with self._lock:
+                self._entries[key] = (now, value)
         return value
 
 
@@ -306,10 +210,7 @@ def browse_category(category: str) -> list[dict]:
                 continue
             seen.add(bucket[index]["id"])
             merged.append(bucket[index])
-    # Each tag query was deduplicated on its own, but a station can appear
-    # under several tags as different bitrate variants, so collapse again
-    # across the combined list.
-    return deduplicate(merged)
+    return merged
 
 
 @app.get("/api/browse")
