@@ -108,6 +108,10 @@ h1 em { font-family: "Fraunces", serif; font-weight: 500; color: var(--orange); 
 .station:hover, .station.active { padding-left: 10px; background: var(--surface-hover); }
 .station.active { box-shadow: inset 2px 0 var(--orange); }
 .station-image { width: 38px; height: 38px; border-radius: 5px; background: #dedad2; object-fit: cover; }
+/* Stand-in for stations that publish no artwork, tinted by --tile-hue so each
+   station keeps a consistent color. */
+.station-initial { display: grid; place-items: center; font-size: 15px; font-weight: 700; color: hsl(var(--tile-hue) 58% 30%); background: hsl(var(--tile-hue) 46% 82%); }
+:root[data-theme="dark"] .station-initial { color: hsl(var(--tile-hue) 55% 82%); background: hsl(var(--tile-hue) 30% 26%); }
 .station-copy { min-width: 0; }
 .station-name { display: block; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .station-meta { display: block; color: #97928b; font-size: 9px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

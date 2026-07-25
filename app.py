@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
+from urllib.parse import urlsplit
 
 import requests
 from flask import Flask, jsonify, render_template, request
@@ -11,6 +13,82 @@ from flask import Flask, jsonify, render_template, request
 
 class StationNotFound(LookupError):
     """Raised when Radio-Browser has no station with the requested ID."""
+
+
+# Suffixes where the registrable domain is three labels deep, so "bbc.co.uk"
+# isn't mistaken for the far too broad "co.uk".
+MULTI_LABEL_SUFFIXES = frozenset({
+    "co.uk", "org.uk", "ac.uk", "gov.uk", "co.nz", "co.za", "co.jp", "co.kr",
+    "co.in", "com.au", "net.au", "org.au", "com.br", "com.ar", "com.mx",
+    "com.tr", "com.pl", "com.ua", "com.cn", "com.tw", "com.hk", "com.sg",
+})
+
+
+def registrable_domain(url: str | None) -> str | None:
+    """Reduce a URL to the domain its owner registered ('audio.jam.fm' -> 'jam.fm')."""
+    if not url:
+        return None
+    host = urlsplit(url if "//" in url else f"//{url}").netloc.lower().split(":")[0]
+    labels = [label for label in host.split(".") if label]
+    if len(labels) < 2:
+        return None
+    domain = ".".join(labels[-2:])
+    if domain in MULTI_LABEL_SUFFIXES and len(labels) >= 3:
+        return ".".join(labels[-3:])
+    return domain
+
+
+def normalize_name(name: str) -> str:
+    """Casefold and drop punctuation, keeping letters of every script."""
+    return re.sub(r"\W+", "", (name or "").casefold(), flags=re.UNICODE)
+
+
+def deduplicate(stations: list[dict]) -> list[dict]:
+    """Collapse the bitrate variants Radio-Browser lists as separate stations.
+
+    A stream submitted at several bitrates becomes several entries - searching
+    "srf" returns Radio SRF 3 three times, at 48, 64 and 88 kbps. Grouping on
+    name alone would be far too aggressive, since plenty of unrelated stations
+    share generic names, so a group also has to agree on the operator's domain,
+    taken from the homepage where there is one and the stream host otherwise.
+
+    The highest-bitrate entry wins, and any artwork or homepage its siblings
+    have is copied over - the best-sounding variant is often the one missing a
+    favicon.
+    """
+    by_name: dict[str, list[dict]] = {}
+    for station in stations:
+        by_name.setdefault(normalize_name(station["name"]), []).append(station)
+
+    groups: list[list[dict]] = []
+    for named in by_name.values():
+        # Within one name, cluster by any shared domain. Checking homepage and
+        # stream host together matters because a station's variants often carry
+        # the homepage inconsistently - one entry has it, its twin doesn't.
+        clusters: list[tuple[set[str], list[dict]]] = []
+        for station in named:
+            domains = {
+                registrable_domain(station.get("homepage")),
+                registrable_domain(station.get("url")),
+            }
+            domains.discard(None)
+            match = next((c for c in clusters if c[0] & domains), None)
+            if match is None:
+                clusters.append((domains, [station]))
+            else:
+                match[0].update(domains)
+                match[1].append(station)
+        groups.extend(members for _, members in clusters)
+
+    merged = []
+    for members in groups:
+        best = max(members, key=lambda s: (s.get("bitrate") or 0, s.get("votes") or 0))
+        if not best.get("image"):
+            best["image"] = next((m["image"] for m in members if m.get("image")), None)
+        if not best.get("homepage"):
+            best["homepage"] = next((m["homepage"] for m in members if m.get("homepage")), None)
+        merged.append(best)
+    return merged
 
 
 class RadioBrowserAPI:
@@ -69,12 +147,16 @@ class RadioBrowserAPI:
             "bitrate": item.get("bitrate") or None,
             "country": item.get("country") or None,
             "homepage": item.get("homepage") or None,
+            "votes": item.get("votes") or 0,
             "url": url,
         }
 
     def _stations(self, path: str, params: dict[str, Any] | None = None) -> list[dict]:
         payload = self._get(path, params)
-        return [self._station(item) for item in payload if item.get("stationuuid")]
+        stations = [self._station(item) for item in payload if item.get("stationuuid")]
+        # Radio-Browser is ordered by popularity; grouping preserves the order
+        # each station was first seen in, so the ranking survives.
+        return deduplicate(stations)
 
     def search(self, query: str, limit: int = 60) -> list[dict]:
         return self._stations(
@@ -191,7 +273,10 @@ def browse_category(category: str) -> list[dict]:
                 continue
             seen.add(bucket[index]["id"])
             merged.append(bucket[index])
-    return merged
+    # Each tag query was deduplicated on its own, but a station can appear
+    # under several tags as different bitrate variants, so collapse again
+    # across the combined list.
+    return deduplicate(merged)
 
 
 @app.get("/api/browse")

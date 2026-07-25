@@ -44,6 +44,16 @@ function escapeHtml(value = '') {
   return element.innerHTML;
 }
 
+// Around a third of stations publish no artwork, so build a stable stand-in
+// from the name: its first character over a hue derived from the whole string,
+// which keeps the same station the same color every time it's listed.
+function initialTile(name = '') {
+  const letter = [...name.trim()][0] || '?';
+  let hash = 0;
+  for (const character of name) hash = (hash * 31 + character.codePointAt(0)) % 360;
+  return `<span class="station-image station-initial" style="--tile-hue:${hash}">${escapeHtml(letter.toUpperCase())}</span>`;
+}
+
 function renderStations(items, title = 'On the air') {
   stations = items.filter(station => station.id);
   document.querySelector('#results-title').textContent = title;
@@ -56,8 +66,9 @@ function renderStations(items, title = 'On the air') {
   list.innerHTML = stations.map((station, index) => `
     <button class="station ${currentStation?.id === station.id ? 'active' : ''}" data-index="${index}" type="button">
       ${station.image
-        ? `<img class="station-image" src="${escapeHtml(station.image)}" alt="" loading="lazy">`
-        : '<span class="station-image"></span>'}
+        ? `<img class="station-image" src="${escapeHtml(station.image)}" alt="" loading="lazy"
+             data-name="${escapeHtml(station.name)}">`
+        : initialTile(station.name)}
       <span class="station-copy">
         <span class="station-name">${escapeHtml(station.name)}</span>
         <span class="station-meta">${escapeHtml(station.subtext || station.formats || 'Live radio')}</span>
@@ -177,6 +188,14 @@ list.addEventListener('click', event => {
   const station = event.target.closest('.station');
   if (station) selectStation(Number(station.dataset.index));
 });
+
+// Plenty of the published favicon URLs are dead. Listen during capture, since
+// image errors don't bubble, and swap the broken image for a letter tile.
+list.addEventListener('error', event => {
+  const image = event.target;
+  if (image.tagName !== 'IMG' || !image.classList.contains('station-image')) return;
+  image.outerHTML = initialTile(image.dataset.name || '');
+}, true);
 
 playButton.addEventListener('click', () => {
   if (!currentStation) return selectStation(0);
