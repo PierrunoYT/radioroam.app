@@ -38,9 +38,33 @@ def registrable_domain(url: str | None) -> str | None:
     return domain
 
 
+# Bracketed quality tags: "(AAC 192)", "(128k)", "[aac]", "(MP3)".
+QUALITY_TAG = re.compile(
+    r"[(\[]\s*(?:aac\+?p?|mp3|ogg|opus|flac|hls|hd|sd|stereo"
+    r"|\d{2,3}\s*k?(?:bps)?|[\s,.\-x/])+\s*[)\]]",
+    re.IGNORECASE,
+)
+
+# "Radio" is decoration rather than identity: the same station is listed as
+# "SRF 3", "Radio SRF 3" and "SRF1 Radio".
+STATION_WORD = re.compile(r"\b(?:radio|rádio|radyo)\b", re.IGNORECASE)
+
+
 def normalize_name(name: str) -> str:
-    """Casefold and drop punctuation, keeping letters of every script."""
-    return re.sub(r"\W+", "", (name or "").casefold(), flags=re.UNICODE)
+    """Reduce a station name to the part that actually identifies it.
+
+    Broadcasters label the same stream inconsistently - "SRF 3", "Radio SRF 3"
+    and "Radio SRF 3 (AAC 192)" are one station - so the quality tag and the
+    word "radio" are dropped before comparing. Only the tags listed above are
+    stripped: a parenthetical like "(El Centro)" or "(Top 40 & Pop Music)"
+    distinguishes real stations and has to survive.
+
+    Names that are *only* decoration ("Radio", "(128k)") would collapse to an
+    empty string and swallow each other, so those keep their full name.
+    """
+    stripped = STATION_WORD.sub(" ", QUALITY_TAG.sub(" ", name or ""))
+    reduced = re.sub(r"\W+", "", stripped.casefold(), flags=re.UNICODE)
+    return reduced or re.sub(r"\W+", "", (name or "").casefold(), flags=re.UNICODE)
 
 
 def deduplicate(stations: list[dict]) -> list[dict]:
@@ -83,6 +107,15 @@ def deduplicate(stations: list[dict]) -> list[dict]:
     merged = []
     for members in groups:
         best = max(members, key=lambda s: (s.get("bitrate") or 0, s.get("votes") or 0))
+        # The highest-bitrate entry is often the one labelled "(AAC 192)", an
+        # encoding detail rather than a name. Label the group from its most
+        # voted member instead, since that is the entry listeners actually
+        # recognise ("BBC Radio 2" over the same station filed as "bbc 2"),
+        # and drop any quality tag so the label can't advertise a bitrate
+        # different from the stream being played.
+        label = max(members, key=lambda m: (m.get("votes") or 0, -len(m["name"])))
+        cleaned = re.sub(r"\s{2,}", " ", QUALITY_TAG.sub(" ", label["name"])).strip()
+        best["name"] = cleaned or label["name"].strip()
         if not best.get("image"):
             best["image"] = next((m["image"] for m in members if m.get("image")), None)
         if not best.get("homepage"):
