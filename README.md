@@ -1,6 +1,6 @@
 # Radio Roam
 
-Radio Roam is a web-based live radio player with an iPod-inspired interface. It uses TuneIn/RadioTime to discover stations and resolve playable streams, while a lightweight Flask backend keeps external API requests and stream selection out of the browser.
+Radio Roam is a web-based live radio player with an iPod-inspired interface. It uses the [Radio-Browser](https://www.radio-browser.info/) community directory to discover stations and resolve playable streams, while a lightweight Flask backend keeps external API requests and stream selection out of the browser.
 
 ## Features
 
@@ -14,7 +14,7 @@ Radio Roam is a web-based live radio player with an iPod-inspired interface. It 
 ## Requirements
 
 - Python 3.9 or newer
-- An internet connection for TuneIn data, station artwork, live streams, and Google Fonts
+- An internet connection for Radio-Browser data, station artwork, live streams, and Google Fonts
 
 ## Getting started
 
@@ -52,6 +52,27 @@ python app.py
 
 Open [http://localhost:5000](http://localhost:5000) in a browser.
 
+## Station data
+
+All station data comes from the [Radio-Browser](https://www.radio-browser.info/)
+API at request time — there is nothing to download, build, or keep in sync. No
+API key is required.
+
+| Endpoint used | Purpose |
+| --- | --- |
+| `/json/stations/search` | Search by station name |
+| `/json/stations/bytag/<tag>` | Genre listings behind the category buttons |
+| `/json/stations/bycountrycodeexact/<code>` | The **Near me** category |
+| `/json/url/<uuid>` | Resolve a station's current stream URL |
+
+Requests go to the `all.api.radio-browser.info` round-robin address, falling back
+to a named mirror if that hands out a host that is down. Results are requested
+with `hidebroken=true` so stations failing Radio-Browser's health checks are
+excluded, and ordered by `clickcount` so well-known stations surface first.
+
+`/json/url/<uuid>` both returns the current URL and registers the play, which is
+how Radio-Browser ranks stations — so resolving a stream also votes for it.
+
 ## Usage
 
 Radio Roam loads music stations when it starts. Select a category or enter a search, then choose a station to begin playback. The click wheel controls playback, station navigation, search focus, and volume. Use the heart button to save the current station and the **Favorites** button to view saved stations.
@@ -69,13 +90,13 @@ The Flask server exposes these endpoints to the frontend:
 | `GET /api/browse?category=<category>` | Browse `music`, `talk`, `sports`, or `local` stations |
 | `GET /api/stream/<station_id>` | Resolve ordered stream candidates for a station |
 
-API failures are returned as JSON with an `error` field. Invalid input returns `400`, unavailable streams return `404`, upstream failures return `502`, and upstream timeouts return `504`.
+API failures are returned as JSON with an `error` field. Invalid input returns `400`, unknown or unplayable stations return `404`, upstream failures return `502`, and upstream timeouts return `504`.
 
 ## Project structure
 
 ```text
 Radio.player/
-├── app.py                 # Flask routes and TuneIn/RadioTime client
+├── app.py                 # Flask routes and Radio-Browser client
 ├── requirements.txt       # Python dependencies
 ├── static/
 │   ├── app.css            # Responsive player styling
@@ -86,6 +107,8 @@ Radio.player/
 
 ## Notes
 
-- Radio Roam relies on public TuneIn/RadioTime endpoints and does not require an API key. Changes or outages in that upstream service can affect the app.
+- Radio Roam relies on the public Radio-Browser API and does not require an API key. Changes or outages in that upstream service can affect the app.
+- Category listings are cached in memory for ten minutes, so repeated browsing does not re-query the API.
+- **Near me** infers the listener's country from the `Accept-Language` header, since Radio-Browser has no geo-targeted feed. It is a rough guess, and returns nothing when the browser sends no region subtag.
 - Stream availability and browser codec support vary by station. The app prioritizes HTTPS streams and common MP3, AAC, Ogg, and Opus formats, but some stations may still be unavailable.
 - The built-in server runs with Flask debug mode enabled and is intended for local development, not production deployment.
