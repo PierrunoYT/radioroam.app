@@ -135,8 +135,13 @@ and deployments" screen, use:
 No build step is needed — the output directory is already checked into the
 repo. Cloudflare automatically picks up the `functions/` folder at the repo
 root and serves `/api/search`, `/api/browse`, and `/api/stream/<id>` from it.
-`public/_redirects` rewrites `/privacy` and `/terms` to their `.html` files so
-the URLs match the Flask version.
+
+Pages serves `privacy.html` at `/privacy` on its own and 308-redirects the
+`.html` URL to the extensionless one, so no `_redirects` rules are needed for
+those pages — adding a `/privacy /privacy.html 200` rewrite makes the two
+rules fight each other and produces a redirect loop. `public/404.html` is
+picked up automatically for unmatched paths, and `public/_headers` sets the
+CSP and related security headers.
 
 If `app.py` changes, mirror the change in `functions/_lib/radio-browser.js`
 and the relevant `functions/api/*.js` file so the two stay in sync.
