@@ -13,15 +13,24 @@ const themeToggle = document.querySelector('#theme-toggle');
 let stations = [];
 let currentIndex = -1;
 let currentStation = null;
-let favorites = JSON.parse(
-  localStorage.getItem(favoritesKey) ||
-  localStorage.getItem('radio-player-favorites') ||
-  '[]'
-);
+let favorites = loadFavorites();
 let toastTimer;
 let streamCandidates = [];
 let streamCandidateIndex = -1;
 let shouldBePlaying = false;
+
+function loadFavorites() {
+  try {
+    const value = JSON.parse(
+      localStorage.getItem(favoritesKey) ||
+      localStorage.getItem('radio-player-favorites') ||
+      '[]'
+    );
+    return Array.isArray(value) ? value.filter(station => station && typeof station === 'object') : [];
+  } catch {
+    return [];
+  }
+}
 
 function updateThemeToggle() {
   const isDark = document.documentElement.dataset.theme === 'dark';
@@ -38,47 +47,87 @@ themeToggle.addEventListener('click', () => {
 });
 updateThemeToggle();
 
-function escapeHtml(value = '') {
-  const element = document.createElement('div');
-  element.textContent = value;
-  return element.innerHTML;
+function safeRemoteUrl(value) {
+  if (typeof value !== 'string') return null;
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : null;
+  } catch {
+    return null;
+  }
 }
 
 // Around a third of stations publish no artwork, so build a stable stand-in
 // from the name: its first character over a hue derived from the whole string,
 // which keeps the same station the same color every time it's listed.
 function initialTile(name = '') {
+  name = String(name);
   const letter = [...name.trim()][0] || '?';
   let hash = 0;
   for (const character of name) hash = (hash * 31 + character.codePointAt(0)) % 360;
-  return `<span class="station-image station-initial" style="--tile-hue:${hash}">${escapeHtml(letter.toUpperCase())}</span>`;
+  const tile = document.createElement('span');
+  tile.className = 'station-image station-initial';
+  tile.style.setProperty('--tile-hue', hash);
+  tile.textContent = letter.toUpperCase();
+  return tile;
+}
+
+function stationNode(station, index) {
+  const button = document.createElement('button');
+  button.className = `station${currentStation?.id === station.id ? ' active' : ''}`;
+  button.dataset.index = index;
+  button.type = 'button';
+
+  const imageUrl = safeRemoteUrl(station.image);
+  if (imageUrl) {
+    const image = document.createElement('img');
+    image.className = 'station-image';
+    image.src = imageUrl;
+    image.alt = '';
+    image.loading = 'lazy';
+    image.dataset.name = String(station.name || '');
+    button.append(image);
+  } else {
+    button.append(initialTile(station.name));
+  }
+
+  const copy = document.createElement('span');
+  copy.className = 'station-copy';
+  const name = document.createElement('span');
+  name.className = 'station-name';
+  name.textContent = String(station.name || 'Unknown station');
+  const metadata = document.createElement('span');
+  metadata.className = 'station-meta';
+  metadata.textContent = String(station.subtext || station.formats || 'Live radio');
+  copy.append(name, metadata);
+
+  const play = document.createElement('span');
+  play.className = 'station-play';
+  play.textContent = '▶';
+  button.append(copy, play);
+  return button;
 }
 
 function renderStations(items, title = 'On the air') {
-  stations = items.filter(station => station.id);
+  stations = Array.isArray(items) ? items.filter(station => station?.id) : [];
   document.querySelector('#results-title').textContent = title;
   document.querySelector('#results-count').textContent = `${stations.length} stations`;
   if (!stations.length) {
-    list.innerHTML = '<div class="empty">No stations found. Try another search.</div>';
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = 'No stations found. Try another search.';
+    list.replaceChildren(empty);
     return;
   }
 
-  list.innerHTML = stations.map((station, index) => `
-    <button class="station ${currentStation?.id === station.id ? 'active' : ''}" data-index="${index}" type="button">
-      ${station.image
-        ? `<img class="station-image" src="${escapeHtml(station.image)}" alt="" loading="lazy"
-             data-name="${escapeHtml(station.name)}">`
-        : initialTile(station.name)}
-      <span class="station-copy">
-        <span class="station-name">${escapeHtml(station.name)}</span>
-        <span class="station-meta">${escapeHtml(station.subtext || station.formats || 'Live radio')}</span>
-      </span>
-      <span class="station-play">▶</span>
-    </button>`).join('');
+  list.replaceChildren(...stations.map(stationNode));
 }
 
 function setLoading() {
-  list.innerHTML = '<div class="loading-state"><span></span><span></span><span></span></div>';
+  const loading = document.createElement('div');
+  loading.className = 'loading-state';
+  loading.append(document.createElement('span'), document.createElement('span'), document.createElement('span'));
+  list.replaceChildren(loading);
   document.querySelector('#results-count').textContent = '';
 }
 
@@ -110,7 +159,9 @@ async function selectStation(index, autoplay = true) {
   document.querySelector('#now-status').textContent = 'TUNING…';
   try {
     const data = await getJson(`/api/stream/${encodeURIComponent(station.id)}`);
-    streamCandidates = data.urls?.length ? data.urls : [data.url];
+    const candidates = data.urls?.length ? data.urls : [data.url];
+    streamCandidates = candidates.map(safeRemoteUrl).filter(Boolean);
+    if (!streamCandidates.length) throw new Error('No playable stream was found.');
     streamCandidateIndex = 0;
     shouldBePlaying = autoplay;
     audio.src = streamCandidates[streamCandidateIndex];
@@ -126,8 +177,9 @@ function updatePlayer() {
   if (!currentStation) return;
   document.querySelector('#now-name').textContent = currentStation.name;
   document.querySelector('#now-subtext').textContent = currentStation.subtext || currentStation.formats || 'Live radio';
-  artwork.style.backgroundImage = currentStation.image ? `url("${currentStation.image.replaceAll('"', '%22')}")` : '';
-  artwork.classList.toggle('has-image', Boolean(currentStation.image));
+  const imageUrl = safeRemoteUrl(currentStation.image);
+  artwork.style.backgroundImage = imageUrl ? `url("${imageUrl}")` : '';
+  artwork.classList.toggle('has-image', Boolean(imageUrl));
   favoriteButton.classList.toggle('active', isFavorite(currentStation.id));
   favoriteButton.textContent = isFavorite(currentStation.id) ? '♥' : '♡';
 }
@@ -156,7 +208,10 @@ function showToast(message) {
 }
 
 function showError(message) {
-  list.innerHTML = `<div class="empty">${escapeHtml(message)}</div>`;
+  const empty = document.createElement('div');
+  empty.className = 'empty';
+  empty.textContent = message;
+  list.replaceChildren(empty);
   showToast(message);
 }
 
@@ -194,7 +249,7 @@ list.addEventListener('click', event => {
 list.addEventListener('error', event => {
   const image = event.target;
   if (image.tagName !== 'IMG' || !image.classList.contains('station-image')) return;
-  image.outerHTML = initialTile(image.dataset.name || '');
+  image.replaceWith(initialTile(image.dataset.name || ''));
 }, true);
 
 playButton.addEventListener('click', () => {

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
 import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import requests
 from flask import Flask, jsonify, render_template, request
@@ -73,16 +74,16 @@ class RadioBrowserAPI:
             part for part in (quality, ", ".join(tags[:2]), location) if part
         )
         # Prefer url_resolved: `url` may point at a playlist the browser can't read.
-        url = item.get("url_resolved") or item.get("url")
+        url = safe_remote_url(item.get("url_resolved") or item.get("url"))
         return {
             "id": item.get("stationuuid"),
             "name": (item.get("name") or "Unknown station").strip(),
             "subtext": subtext or "Live radio",
-            "image": item.get("favicon") or None,
+            "image": safe_remote_url(item.get("favicon")),
             "formats": item.get("codec") or None,
             "bitrate": item.get("bitrate") or None,
             "country": item.get("country") or None,
-            "homepage": item.get("homepage") or None,
+            "homepage": safe_remote_url(item.get("homepage")),
             "votes": item.get("votes") or 0,
             "url": url,
         }
@@ -97,11 +98,11 @@ class RadioBrowserAPI:
         )
 
     def by_tag(self, tag: str, limit: int = 60) -> list[dict]:
-        return self._stations(f"json/stations/bytag/{tag}", {"limit": limit})
+        return self._stations(f"json/stations/bytag/{quote(tag, safe='')}", {"limit": limit})
 
     def by_country_code(self, code: str, limit: int = 60) -> list[dict]:
         return self._stations(
-            f"json/stations/bycountrycodeexact/{code}", {"limit": limit}
+            f"json/stations/bycountrycodeexact/{quote(code, safe='')}", {"limit": limit}
         )
 
     def get_stream_url(self, station_uuid: str) -> str | None:
@@ -110,15 +111,31 @@ class RadioBrowserAPI:
         Radio-Browser ranks stations by click count, so this endpoint is both
         how you get a fresh URL and how you vote for the station.
         """
-        data = self._get(f"json/url/{station_uuid}")
-        return data.get("url") if str(data.get("ok")).lower() == "true" else None
+        data = self._get(f"json/url/{quote(station_uuid, safe='')}")
+        if str(data.get("ok")).lower() != "true":
+            return None
+        return safe_remote_url(data.get("url"))
+
+
+def safe_remote_url(value: Any) -> str | None:
+    """Return only absolute HTTP(S) URLs supplied by station operators."""
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = urlsplit(value.strip())
+    except ValueError:
+        return None
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        return None
+    return value.strip()
 
 
 class TTLCache:
     """Tiny time-boxed cache so repeated browsing doesn't hammer the API."""
 
-    def __init__(self, ttl: int = 600) -> None:
+    def __init__(self, ttl: int = 600, max_entries: int = 512) -> None:
         self.ttl = ttl
+        self.max_entries = max_entries
         self._entries: dict[Any, tuple[float, Any]] = {}
         self._lock = threading.Lock()
 
@@ -128,19 +145,66 @@ class TTLCache:
             entry = self._entries.get(key)
             if entry and now - entry[0] < self.ttl:
                 return entry[1]
+            if entry:
+                del self._entries[key]
         value = produce()
         # Don't cache an empty result. Radio-Browser occasionally answers a tag
         # query with nothing, and storing that would leave a category looking
         # broken for the full TTL rather than for one request.
         if value:
             with self._lock:
+                if key not in self._entries and len(self._entries) >= self.max_entries:
+                    del self._entries[next(iter(self._entries))]
                 self._entries[key] = (now, value)
         return value
+
+
+class FixedWindowRateLimiter:
+    """Small per-process guard; production proxies should enforce this globally too."""
+
+    def __init__(self, max_entries: int = 4096) -> None:
+        self.max_entries = max_entries
+        self._entries: dict[tuple[str, str], tuple[float, int]] = {}
+        self._lock = threading.Lock()
+
+    def check(self, scope: str, client: str, limit: int, window: int = 60) -> int | None:
+        now = time.monotonic()
+        key = (scope, client)
+        with self._lock:
+            started_at, count = self._entries.get(key, (now, 0))
+            if now - started_at >= window:
+                started_at, count = now, 0
+            count += 1
+            if key not in self._entries and len(self._entries) >= self.max_entries:
+                del self._entries[next(iter(self._entries))]
+            self._entries[key] = (started_at, count)
+        if count <= limit:
+            return None
+        return max(1, int(window - (now - started_at)) + 1)
 
 
 app = Flask(__name__)
 radio = RadioBrowserAPI()
 browse_cache = TTLCache(ttl=600)
+search_cache = TTLCache(ttl=60)
+stream_cache = TTLCache(ttl=30)
+rate_limiter = FixedWindowRateLimiter()
+
+SEARCH_QUERY_MAX_LENGTH = 100
+STATION_ID_PATTERN = re.compile(r"^[A-Za-z0-9-]{1,64}$")
+
+SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src https://fonts.gstatic.com; img-src 'self' data: https:; "
+        "media-src https: http:; connect-src 'self'; object-src 'none'; "
+        "base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    ),
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+}
 
 # Each category maps to the Radio-Browser tags that best represent it. Results
 # for every tag are interleaved so a category isn't dominated by one genre.
@@ -149,6 +213,23 @@ CATEGORY_TAGS = {
     "talk": ["talk", "news", "public radio", "comedy"],
     "sports": ["sports", "football", "basketball"],
 }
+
+
+@app.after_request
+def add_security_headers(response):
+    for name, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    return response
+
+
+def rate_limit(scope: str, limit: int):
+    retry_after = rate_limiter.check(scope, request.remote_addr or "unknown", limit)
+    if retry_after is None:
+        return None
+    response = jsonify({"error": "Too many requests. Please try again shortly."})
+    response.status_code = 429
+    response.headers["Retry-After"] = str(retry_after)
+    return response
 
 
 @app.get("/")
@@ -168,10 +249,16 @@ def terms():
 
 @app.get("/api/search")
 def search():
+    limited = rate_limit("search", 30)
+    if limited:
+        return limited
+
     query = request.args.get("q", "").strip()
     if not query:
         return jsonify({"error": "Enter a station, show, or genre."}), 400
-    return api_response(lambda: radio.search(query))
+    if len(query) > SEARCH_QUERY_MAX_LENGTH:
+        return jsonify({"error": "Searches must be 100 characters or fewer."}), 400
+    return api_response(lambda: search_cache.get_or_set(query.casefold(), lambda: radio.search(query)))
 
 
 def listener_country_code() -> str | None:
@@ -215,18 +302,33 @@ def browse_category(category: str) -> list[dict]:
 
 @app.get("/api/browse")
 def browse():
+    limited = rate_limit("browse", 60)
+    if limited:
+        return limited
+
     category = request.args.get("category", "music").lower()
     if category not in {"music", "talk", "sports", "local"}:
         return jsonify({"error": "Unknown category."}), 400
     # "Local" varies per listener, so it's keyed by the country we inferred.
     key = (category, listener_country_code() if category == "local" else None)
-    return api_response(lambda: browse_cache.get_or_set(key, lambda: browse_category(category)))
+    response = api_response(lambda: browse_cache.get_or_set(key, lambda: browse_category(category)))
+    if category == "local":
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["Vary"] = "Accept-Language"
+    return response
 
 
 @app.get("/api/stream/<station_id>")
 def stream(station_id: str):
+    limited = rate_limit("stream", 20)
+    if limited:
+        return limited
+
+    if not STATION_ID_PATTERN.fullmatch(station_id):
+        return jsonify({"error": "Invalid station ID."}), 400
+
     def resolve_streams():
-        url = radio.get_stream_url(station_id)
+        url = stream_cache.get_or_set(station_id, lambda: radio.get_stream_url(station_id))
         return {"url": url, "urls": [url] if url else []}
 
     return api_response(resolve_streams)
@@ -247,4 +349,5 @@ def api_response(action):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    debug = os.getenv("FLASK_DEBUG", "").lower() in {"1", "true", "yes"}
+    app.run(debug=debug, port=5000)

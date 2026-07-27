@@ -3,6 +3,11 @@
 
 const HOSTS = ['https://all.api.radio-browser.info', 'https://de1.api.radio-browser.info'];
 const DEFAULTS = { hidebroken: 'true', order: 'clickcount', reverse: 'true' };
+const CACHE_TTL_MS = 10 * 60 * 1000;
+const MAX_CACHE_ENTRIES = 512;
+const MAX_RATE_LIMIT_ENTRIES = 4096;
+const cache = new Map();
+const rateLimits = new Map();
 
 export class StationNotFound extends Error {}
 
@@ -40,16 +45,16 @@ function toStation(item) {
   ].filter(Boolean).join(' ');
   const subtext = [quality, tags.slice(0, 2).join(', '), location].filter(Boolean).join(' · ');
   // Prefer url_resolved: `url` may point at a playlist the browser can't read.
-  const url = item.url_resolved || item.url;
+  const url = safeRemoteUrl(item.url_resolved || item.url);
   return {
     id: item.stationuuid,
     name: (item.name || 'Unknown station').trim(),
     subtext: subtext || 'Live radio',
-    image: item.favicon || null,
+    image: safeRemoteUrl(item.favicon),
     formats: item.codec || null,
     bitrate: item.bitrate || null,
     country: item.country || null,
-    homepage: item.homepage || null,
+    homepage: safeRemoteUrl(item.homepage),
     votes: item.votes || 0,
     url,
   };
@@ -76,33 +81,77 @@ export function byCountryCode(code, limit = 60) {
 // you get a fresh URL and how you vote for the station.
 export async function getStreamUrl(stationUuid) {
   const data = await get(`json/url/${encodeURIComponent(stationUuid)}`);
-  return String(data.ok).toLowerCase() === 'true' ? data.url : null;
+  return String(data.ok).toLowerCase() === 'true' ? safeRemoteUrl(data.url) : null;
+}
+
+export function safeRemoteUrl(value) {
+  if (typeof value !== 'string') return null;
+  try {
+    const url = new URL(value.trim());
+    return ['http:', 'https:'].includes(url.protocol) && url.hostname ? url.href : null;
+  } catch {
+    return null;
+  }
 }
 
 // Tiny time-boxed cache so repeated browsing doesn't hammer the API. This
 // lives at module scope, so it's shared across requests handled by the same
 // warm isolate and empty again after a cold start - a rough equivalent of
 // the Flask app's in-process TTL cache.
-const CACHE_TTL_MS = 10 * 60 * 1000;
-const cache = new Map();
-
-export async function cached(key, produce) {
+export async function cached(key, produce, ttl = CACHE_TTL_MS) {
   const now = Date.now();
   const entry = cache.get(key);
-  if (entry && now - entry.at < CACHE_TTL_MS) return entry.value;
+  if (entry && now - entry.at < ttl) return entry.value;
+  if (entry) cache.delete(key);
   const value = await produce();
   // Don't cache an empty result. Radio-Browser occasionally answers a tag
   // query with nothing, and storing that would leave a category looking
   // broken for the full TTL rather than for one request.
-  if (value && value.length) cache.set(key, { at: now, value });
+  if (value && (!Array.isArray(value) || value.length)) {
+    if (!cache.has(key) && cache.size >= MAX_CACHE_ENTRIES) {
+      cache.delete(cache.keys().next().value);
+    }
+    cache.set(key, { at: now, value });
+  }
   return value;
 }
 
-export function jsonResponse(body, status = 200) {
+export function jsonResponse(body, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'cache-control': 'no-store',
+      'content-type': 'application/json',
+      'referrer-policy': 'strict-origin-when-cross-origin',
+      'x-content-type-options': 'nosniff',
+      ...headers,
+    },
   });
+}
+
+// This limits abuse within each warm Pages Functions isolate. A Cloudflare
+// rate-limiting rule should also be configured for globally consistent limits.
+export function rateLimit(request, scope, limit, windowMs = 60_000) {
+  const client = request.headers.get('cf-connecting-ip') || 'unknown';
+  const key = `${scope}:${client}`;
+  const now = Date.now();
+  let entry = rateLimits.get(key);
+  if (!entry || now - entry.startedAt >= windowMs) {
+    entry = { count: 0, startedAt: now };
+    if (!rateLimits.has(key) && rateLimits.size >= MAX_RATE_LIMIT_ENTRIES) {
+      rateLimits.delete(rateLimits.keys().next().value);
+    }
+    rateLimits.set(key, entry);
+  }
+  entry.count += 1;
+  if (entry.count <= limit) return null;
+
+  const retryAfter = Math.max(1, Math.ceil((windowMs - (now - entry.startedAt)) / 1000));
+  return jsonResponse(
+    { error: 'Too many requests. Please try again shortly.' },
+    429,
+    { 'retry-after': String(retryAfter) },
+  );
 }
 
 export async function apiResponse(action) {

@@ -147,4 +147,5 @@ and the relevant `functions/api/*.js` file so the two stay in sync.
 - Category listings are cached in memory for ten minutes, so repeated browsing does not re-query the API.
 - **Near me** infers the listener's country from the `Accept-Language` header, since Radio-Browser has no geo-targeted feed. It is a rough guess, and returns nothing when the browser sends no region subtag.
 - Stream availability and browser codec support vary by station. The app prioritizes HTTPS streams and common MP3, AAC, Ogg, and Opus formats, but some stations may still be unavailable.
-- The built-in server runs with Flask debug mode enabled and is intended for local development, not production deployment.
+- The built-in server is intended for local development, not production deployment. Debug mode is disabled by default and can be explicitly enabled with `FLASK_DEBUG=1`.
+- The application applies best-effort per-process API limits. Cloudflare deployments should also configure platform rate-limiting rules for globally consistent enforcement across Functions isolates.
