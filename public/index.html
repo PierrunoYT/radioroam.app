@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#e9e6e1">
+    <meta name="description" content="Radio Roam — discover live radio stations from around the world.">
+    <title>Radio Roam — The world on shuffle</title>
+    <script>
+      (() => {
+        const savedTheme = localStorage.getItem('radio-roam-theme');
+        const theme = savedTheme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+    <link rel="stylesheet" href="/static/app.css">
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <main class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Radio Roam home">
+          <span class="brand-mark"><i></i><i></i><i></i></span>
+          <span>Radio<span class="brand-dot"> Roam</span></span>
+        </a>
+        <p class="tagline">The world on shuffle.</p>
+        <div class="header-actions">
+          <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">
+            <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>
+            <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.4 15.2A8.5 8.5 0 0 1 8.8 3.6 8.5 8.5 0 1 0 20.4 15.2Z"/></svg>
+          </button>
+          <button class="favorites-button" id="favorites-button" type="button">
+            <span aria-hidden="true">♥</span> Favorites
+          </button>
+        </div>
+      </header>
+
+      <section class="hero">
+        <div class="intro">
+          <p class="eyebrow">Live from everywhere</p>
+          <h1>Turn the dial.<br><em>Find your frequency.</em></h1>
+          <p class="lede">Thousands of stations, one beautifully simple player. Search by city, station, artist, or whatever you feel like hearing.</p>
+
+          <form class="search" id="search-form">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.4-4.4m2.4-5.1a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z"/></svg>
+            <input id="search-input" type="search" placeholder="Search stations, cities, genres…" autocomplete="off" aria-label="Search radio">
+            <kbd>↵</kbd>
+          </form>
+
+          <nav class="categories" aria-label="Station categories">
+            <button class="category active" data-category="music" type="button">Music</button>
+            <button class="category" data-category="talk" type="button">Talk</button>
+            <button class="category" data-category="sports" type="button">Sports</button>
+            <button class="category" data-category="local" type="button">Near me</button>
+          </nav>
+
+          <div class="results-heading">
+            <div><span class="live-dot"></span><span id="results-title">On the air</span></div>
+            <span id="results-count"></span>
+          </div>
+          <div class="station-list" id="station-list" aria-live="polite">
+            <div class="loading-state"><span></span><span></span><span></span></div>
+          </div>
+        </div>
+
+        <div class="player-stage">
+          <div class="signal signal-one"></div>
+          <div class="signal signal-two"></div>
+          <article class="ipod" aria-label="Radio player">
+            <div class="ipod-top"><span></span><span></span></div>
+            <div class="screen">
+              <div class="screen-status">
+                <span id="clock">9:41</span>
+                <span class="on-air"><i></i> LIVE</span>
+                <span class="battery"><i></i></span>
+              </div>
+              <div class="art-wrap">
+                <div class="art" id="artwork">
+                  <span class="art-fallback"><i></i><i></i><i></i><i></i><i></i></span>
+                </div>
+                <button id="favorite-current" class="heart" type="button" aria-label="Favorite current station">♡</button>
+              </div>
+              <div class="track-info">
+                <p id="now-status">READY TO TUNE IN</p>
+                <h2 id="now-name">Radio Roam</h2>
+                <span id="now-subtext">Choose a station to begin</span>
+              </div>
+              <div class="meter" id="meter" aria-hidden="true">
+                <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+              </div>
+            </div>
+
+            <div class="wheel">
+              <button class="wheel-label menu-button" type="button">MENU</button>
+              <button class="wheel-label previous" id="previous" type="button" aria-label="Previous station">◀◀</button>
+              <button class="wheel-label next" id="next" type="button" aria-label="Next station">▶▶</button>
+              <button class="wheel-label volume-toggle" id="mute" type="button" aria-label="Mute">−</button>
+              <button class="play-button" id="play" type="button" aria-label="Play"><span></span></button>
+              <div class="volume-bar" aria-label="Volume">
+                <span>−</span><input id="volume" type="range" min="0" max="1" step="0.01" value="0.72"><span>+</span>
+              </div>
+            </div>
+            <div class="dock-slot"></div>
+          </article>
+          <p class="hint">Pick a station and press play</p>
+        </div>
+      </section>
+
+      <footer class="site-footer">
+        <div class="footer-intro">
+          <a class="brand" href="/" aria-label="Radio Roam home">
+            <span class="brand-mark"><i></i><i></i><i></i></span>
+            <span>Radio<span class="brand-dot"> Roam</span></span>
+          </a>
+          <p>Your soundtrack to everywhere.<br>Broadcasting from wherever you are.</p>
+        </div>
+
+        <nav class="footer-group" aria-label="Explore">
+          <p>Explore</p>
+          <a href="#">About us</a>
+          <a href="#">Featured stations</a>
+          <a href="#">Radio journal</a>
+        </nav>
+
+        <nav class="footer-group" aria-label="Support">
+          <p>Support</p>
+          <a href="#">Help center</a>
+          <a href="#">Contact</a>
+          <a href="#">Station owners</a>
+        </nav>
+
+        <div class="footer-group">
+          <p>Keep listening</p>
+          <a href="#">Instagram</a>
+          <a href="#">X / Twitter</a>
+          <a href="mailto:hello@example.com">hello@example.com</a>
+        </div>
+
+        <div class="footer-bottom">
+          <span>© 2026 Radio Roam</span>
+          <div>
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Terms</a>
+          </div>
+          <span>Made for curious ears</span>
+        </div>
+      </footer>
+    </main>
+
+    <audio id="audio" preload="none"></audio>
+    <div class="toast" id="toast" role="status"></div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

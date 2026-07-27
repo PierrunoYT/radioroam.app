@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#e9e6e1">
+    <meta name="description" content="Radio Roam terms of use.">
+    <title>Terms of Use — Radio Roam</title>
+    <script>
+      (() => {
+        const savedTheme = localStorage.getItem('radio-roam-theme');
+        const theme = savedTheme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+    <link rel="stylesheet" href="/static/app.css">
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <main class="app-shell legal-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Radio Roam home">
+          <span class="brand-mark"><i></i><i></i><i></i></span>
+          <span>Radio<span class="brand-dot"> Roam</span></span>
+        </a>
+        <p class="tagline">The world on shuffle.</p>
+        <a class="back-home" href="/">Back to the radio</a>
+      </header>
+
+      <article class="legal-content">
+        <p class="eyebrow">Legal</p>
+        <h1>Terms of Use</h1>
+        <p class="legal-updated">Effective July 23, 2026</p>
+
+        <p>By using Radio Roam, you agree to these terms. If you do not agree, please do not use the service.</p>
+
+        <h2>The service</h2>
+        <p>Radio Roam helps you discover and play publicly available live radio streams. Station listings, artwork, metadata, and audio are provided by the Radio-Browser directory, broadcasters, and other third parties. Radio Roam does not control that content and does not guarantee that any station will remain available.</p>
+
+        <h2>Acceptable use</h2>
+        <p>You may use Radio Roam for personal, lawful listening. You must not misuse the service, interfere with its operation, attempt unauthorized access, or use automated means that place an unreasonable load on Radio Roam or its third-party providers.</p>
+
+        <h2>Third-party content and rights</h2>
+        <p>Broadcasters and other rights holders retain all rights in their streams, names, artwork, and programming. Your use of third-party content may be subject to additional terms and restrictions, including rules that apply in your location.</p>
+
+        <h2>Availability and disclaimer</h2>
+        <p>The service is provided “as is” and “as available.” To the extent permitted by law, Radio Roam disclaims warranties of uninterrupted availability, accuracy, fitness for a particular purpose, and non-infringement. Stream quality, content, and availability can change without notice.</p>
+
+        <h2>Limitation of liability</h2>
+        <p>To the extent permitted by law, Radio Roam will not be liable for indirect, incidental, special, consequential, or punitive damages arising from your use of, or inability to use, the service. Nothing in these terms excludes liability that cannot legally be excluded.</p>
+
+        <h2>Changes and termination</h2>
+        <p>Radio Roam may change, suspend, or discontinue any part of the service and may update these terms. Continued use after an update means you accept the revised terms.</p>
+
+        <h2>Contact</h2>
+        <p>Questions about these terms can be sent to <a href="mailto:hello@example.com">hello@example.com</a>.</p>
+      </article>
+
+      <footer class="legal-footer">
+        <span>© 2026 Radio Roam</span>
+        <nav aria-label="Legal">
+          <a href="/privacy">Privacy</a>
+          <a href="/terms" aria-current="page">Terms</a>
+        </nav>
+      </footer>
+    </main>
+  </body>
+</html>

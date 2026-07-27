@@ -96,14 +96,50 @@ API failures are returned as JSON with an `error` field. Invalid input returns `
 
 ```text
 Radio.player/
-├── app.py                 # Flask routes and Radio-Browser client
+├── app.py                 # Flask routes and Radio-Browser client (local dev server)
 ├── requirements.txt       # Python dependencies
 ├── static/
 │   ├── app.css            # Responsive player styling
 │   └── app.js             # Search, playback, and favorites behavior
-└── templates/
-    └── index.html         # Main player page
+├── templates/
+│   ├── index.html         # Main player page
+│   └── legal.html         # Privacy/terms page template
+├── public/                 # Cloudflare Pages build output (static HTML/CSS/JS)
+└── functions/               # Cloudflare Pages Functions (JS port of the Flask API)
+    ├── _lib/radio-browser.js
+    └── api/
+        ├── search.js
+        ├── browse.js
+        └── stream/[station_id].js
 ```
+
+## Deploying to Cloudflare Pages
+
+The Flask app in `app.py` is for local development only — Cloudflare Pages
+cannot run a Python server. The `public/` and `functions/` directories are a
+static/edge-function port of the same app: `public/` holds the pre-rendered
+HTML and the unchanged `static/` assets, and `functions/api/*` reimplements
+the three JSON endpoints as Pages Functions so `static/app.js` keeps working
+unmodified.
+
+When connecting the GitHub repo in the Cloudflare dashboard's "Set up builds
+and deployments" screen, use:
+
+| Setting | Value |
+| --- | --- |
+| Framework preset | `None` |
+| Build command | *(leave empty)* |
+| Build output directory | `public` |
+| Root directory | *(leave default)* |
+
+No build step is needed — the output directory is already checked into the
+repo. Cloudflare automatically picks up the `functions/` folder at the repo
+root and serves `/api/search`, `/api/browse`, and `/api/stream/<id>` from it.
+`public/_redirects` rewrites `/privacy` and `/terms` to their `.html` files so
+the URLs match the Flask version.
+
+If `app.py` changes, mirror the change in `functions/_lib/radio-browser.js`
+and the relevant `functions/api/*.js` file so the two stay in sync.
 
 ## Notes
 
