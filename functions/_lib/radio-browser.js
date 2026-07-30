@@ -89,6 +89,10 @@ export async function search(query, limit = 60) {
   return merged.slice(0, limit);
 }
 
+export async function debugSearchField(field, query, limit = 60) {
+  return stations('json/stations/search', { [field]: query, limit });
+}
+
 export function byTag(tag, limit = 60) {
   return stations(`json/stations/bytag/${encodeURIComponent(tag)}`, { limit });
 }
