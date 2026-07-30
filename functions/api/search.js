@@ -9,5 +9,8 @@ export async function onRequestGet({ request }) {
   if (query.length > 100) {
     return jsonResponse({ error: 'Searches must be 100 characters or fewer.' }, 400);
   }
+  if (new URL(request.url).searchParams.get('debug') === '1') {
+    return jsonResponse({ build: 'search-merge-v2' });
+  }
   return apiResponse(() => cached(`search:${query.toLocaleLowerCase()}`, () => search(query), 60_000));
 }
