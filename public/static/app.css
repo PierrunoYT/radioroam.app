@@ -253,9 +253,7 @@ h1 em { font-family: "Fraunces", serif; font-weight: 500; color: var(--orange); 
   .favorites-button { width: 34px; height: 34px; padding: 0; font-size: 0; }
   .favorites-button span { margin: 0; font-size: 14px; }
   .search kbd { display: none; }
-  .player-stage { height: 500px; justify-content: flex-start; }
-  .ipod { transform: scale(.8); transform-origin: top center; }
-  .hint { position: absolute; top: 466px; margin: 0; }
+  .ipod { zoom: .8; }
   .legal-shell .brand { font-size: 15px; }
   .back-home { font-size: 10px; }
   .legal-footer { align-items: flex-start; flex-direction: column; }
