@@ -259,6 +259,16 @@ h1 em { font-family: "Fraunces", serif; font-weight: 500; color: var(--orange); 
   .legal-footer { align-items: flex-start; flex-direction: column; }
 }
 
+/* Browser zoom widens the CSS viewport and can otherwise make a phone cross
+   back into the desktop breakpoint. Keep touch-first devices in one column. */
+@media (hover: none) and (pointer: coarse) {
+  .hero { grid-template-columns: minmax(0, 1fr); }
+  .intro { max-width: none; }
+  .player-stage { min-width: 0; }
+  .tagline { display: none; }
+  .topbar { grid-template-columns: 1fr 1fr; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms!important; animation-iteration-count: 1!important; scroll-behavior: auto!important; }
 }
