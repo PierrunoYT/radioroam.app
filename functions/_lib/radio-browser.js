@@ -76,7 +76,7 @@ function titleCase(value) {
 // name search misses stations that only match by country or state (e.g.
 // "Lucerne" or "Switzerland" won't surface Swiss stations whose names don't
 // contain those words). Query name/country/state independently and merge.
-export async function search(query, limit = 60) {
+export async function search(query, limit = 200) {
   const perFieldLimit = limit * 2;
   const results = await Promise.all([
     stations('json/stations/search', { name: query, limit: perFieldLimit }),

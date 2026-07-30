@@ -92,7 +92,7 @@ class RadioBrowserAPI:
         payload = self._get(path, params)
         return [self._station(item) for item in payload if item.get("stationuuid")]
 
-    def search(self, query: str, limit: int = 60) -> list[dict]:
+    def search(self, query: str, limit: int = 200) -> list[dict]:
         # Radio-Browser's /search endpoint ANDs every field together, so a
         # plain name search misses stations that only match by country or
         # state (e.g. "Lucerne" or "Switzerland" won't surface Swiss stations
