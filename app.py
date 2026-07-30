@@ -97,13 +97,17 @@ class RadioBrowserAPI:
         # plain name search misses stations that only match by country or
         # state (e.g. "Lucerne" or "Switzerland" won't surface Swiss stations
         # whose names don't contain those words). Query name/country/state
-        # independently and merge.
+        # independently and merge. Unlike `name` and `state`, `country` is
+        # matched case-sensitively against the stored country name, so it
+        # needs the query title-cased ("switzerland" matches nothing, only
+        # "Switzerland" does).
         per_field_limit = limit * 2
+        field_queries = {"name": query, "country": query.title(), "state": query}
         merged: list[dict] = []
         seen: set[str] = set()
-        for field in ("name", "country", "state"):
+        for field, field_query in field_queries.items():
             for station in self._stations(
-                "json/stations/search", {field: query, "limit": per_field_limit}
+                "json/stations/search", {field: field_query, "limit": per_field_limit}
             ):
                 if station["id"] in seen:
                     continue

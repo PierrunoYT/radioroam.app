@@ -65,6 +65,13 @@ async function stations(path, params) {
   return payload.filter(item => item.stationuuid).map(toStation);
 }
 
+// Unlike `name` and `state`, Radio-Browser's `country` search param is
+// case-sensitive against the stored country name (e.g. "switzerland" matches
+// nothing, only "Switzerland" does), so title-case the query before using it.
+function titleCase(value) {
+  return value.replace(/\w\S*/g, word => word[0].toUpperCase() + word.slice(1).toLowerCase());
+}
+
 // Radio-Browser's /search endpoint ANDs every field together, so a plain
 // name search misses stations that only match by country or state (e.g.
 // "Lucerne" or "Switzerland" won't surface Swiss stations whose names don't
@@ -73,7 +80,7 @@ export async function search(query, limit = 60) {
   const perFieldLimit = limit * 2;
   const results = await Promise.all([
     stations('json/stations/search', { name: query, limit: perFieldLimit }),
-    stations('json/stations/search', { country: query, limit: perFieldLimit }),
+    stations('json/stations/search', { country: titleCase(query), limit: perFieldLimit }),
     stations('json/stations/search', { state: query, limit: perFieldLimit }),
   ]);
   const merged = [];
@@ -87,10 +94,6 @@ export async function search(query, limit = 60) {
   }
   merged.sort((a, b) => b.votes - a.votes);
   return merged.slice(0, limit);
-}
-
-export async function debugSearchField(field, query, limit = 60) {
-  return stations('json/stations/search', { [field]: query, limit });
 }
 
 export function byTag(tag, limit = 60) {
