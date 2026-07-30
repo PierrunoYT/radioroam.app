@@ -93,9 +93,24 @@ class RadioBrowserAPI:
         return [self._station(item) for item in payload if item.get("stationuuid")]
 
     def search(self, query: str, limit: int = 60) -> list[dict]:
-        return self._stations(
-            "json/stations/search", {"name": query, "limit": limit}
-        )
+        # Radio-Browser's /search endpoint ANDs every field together, so a
+        # plain name search misses stations that only match by country or
+        # state (e.g. "Lucerne" or "Switzerland" won't surface Swiss stations
+        # whose names don't contain those words). Query name/country/state
+        # independently and merge.
+        per_field_limit = limit * 2
+        merged: list[dict] = []
+        seen: set[str] = set()
+        for field in ("name", "country", "state"):
+            for station in self._stations(
+                "json/stations/search", {field: query, "limit": per_field_limit}
+            ):
+                if station["id"] in seen:
+                    continue
+                seen.add(station["id"])
+                merged.append(station)
+        merged.sort(key=lambda station: station["votes"], reverse=True)
+        return merged[:limit]
 
     def by_tag(self, tag: str, limit: int = 60) -> list[dict]:
         return self._stations(f"json/stations/bytag/{quote(tag, safe='')}", {"limit": limit})
