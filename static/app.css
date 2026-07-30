@@ -31,8 +31,15 @@
 
 * { box-sizing: border-box; }
 
+html {
+  min-height: 100%;
+  overflow-x: hidden;
+  background: var(--body-background);
+}
+
 body {
   margin: 0;
+  width: 100%;
   min-height: 100vh;
   overflow-x: hidden;
   color: var(--ink);
@@ -265,8 +272,14 @@ h1 em { font-family: "Fraunces", serif; font-weight: 500; color: var(--orange); 
   .hero { grid-template-columns: minmax(0, 1fr); }
   .intro { max-width: none; }
   .player-stage { min-width: 0; }
+  .signal { left: 50%; width: min(540px, 100vw); transform: translateX(-50%); }
+  .signal-two { width: min(650px, 100vw); }
   .tagline { display: none; }
   .topbar { grid-template-columns: 1fr 1fr; }
+}
+
+@supports (overflow: clip) {
+  html, body { overflow-x: clip; }
 }
 
 @media (prefers-reduced-motion: reduce) {
