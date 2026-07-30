@@ -18,6 +18,43 @@ let toastTimer;
 let streamCandidates = [];
 let streamCandidateIndex = -1;
 let shouldBePlaying = false;
+let hls = null;
+let hlsLoadPromise = null;
+
+// `.m3u8` HLS streams need MediaSource-based playback; a plain <audio src>
+// can't decode the manifest. Safari plays it natively, so hls.js is only
+// loaded for browsers (Chrome, Firefox, Edge) that lack that support.
+function isHlsUrl(url) {
+  try {
+    return new URL(url).pathname.toLowerCase().endsWith('.m3u8');
+  } catch {
+    return false;
+  }
+}
+
+function loadHlsLibrary() {
+  if (window.Hls) return Promise.resolve(window.Hls);
+  if (!hlsLoadPromise) {
+    hlsLoadPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = '/static/vendor/hls.light.min.js';
+      script.onload = () => resolve(window.Hls);
+      script.onerror = () => {
+        hlsLoadPromise = null;
+        reject(new Error('Could not load HLS support.'));
+      };
+      document.head.append(script);
+    });
+  }
+  return hlsLoadPromise;
+}
+
+function teardownHls() {
+  if (hls) {
+    hls.destroy();
+    hls = null;
+  }
+}
 
 function loadFavorites() {
   try {
@@ -164,13 +201,67 @@ async function selectStation(index, autoplay = true) {
     if (!streamCandidates.length) throw new Error('No playable stream was found.');
     streamCandidateIndex = 0;
     shouldBePlaying = autoplay;
-    audio.src = streamCandidates[streamCandidateIndex];
+    await setSource(streamCandidates[streamCandidateIndex]);
     document.querySelector('#now-status').textContent = 'NOW BROADCASTING';
-    if (autoplay) await audio.play();
   } catch (error) {
     document.querySelector('#now-status').textContent = 'OFF AIR';
     showToast(error.name === 'NotAllowedError' ? 'Press play to start listening.' : error.message);
   }
+}
+
+// Point the player at a candidate URL, routing HLS manifests through hls.js
+// (or Safari's native support) and everything else straight to <audio src>.
+async function setSource(url) {
+  teardownHls();
+  if (isHlsUrl(url) && !audio.canPlayType('application/vnd.apple.mpegurl')) {
+    return attachHls(url);
+  }
+  audio.src = url;
+  return maybePlay();
+}
+
+async function maybePlay() {
+  if (!shouldBePlaying) return;
+  try {
+    await audio.play();
+  } catch (error) {
+    if (error.name === 'NotAllowedError') throw error;
+    // Other start failures also fire the audio 'error' event, so let the
+    // shared candidate-cycling logic there handle them.
+  }
+}
+
+async function attachHls(url) {
+  let Hls;
+  try {
+    Hls = await loadHlsLibrary();
+  } catch {
+    Hls = null;
+  }
+  if (!Hls?.isSupported()) return handleStreamError();
+
+  // Demuxing on a worker needs `worker-src blob:` in the CSP; running it on
+  // the main thread avoids that extra policy surface for this niche path.
+  hls = new Hls({ enableWorker: false });
+  hls.on(Hls.Events.ERROR, (_event, data) => {
+    if (data.fatal) handleStreamError();
+  });
+  hls.loadSource(url);
+  hls.attachMedia(audio);
+  return maybePlay();
+}
+
+function handleStreamError() {
+  ipod.classList.remove('playing');
+  teardownHls();
+  if (streamCandidateIndex + 1 >= streamCandidates.length) {
+    document.querySelector('#now-status').textContent = 'UNSUPPORTED STREAM';
+    showToast('This station has no browser-compatible stream. Try another station.');
+    return;
+  }
+  streamCandidateIndex += 1;
+  document.querySelector('#now-status').textContent = 'TRYING ANOTHER SIGNAL…';
+  setSource(streamCandidates[streamCandidateIndex]).catch(() => {});
 }
 
 function updatePlayer() {
@@ -282,17 +373,11 @@ audio.volume = Number(volume.value);
 audio.addEventListener('play', () => ipod.classList.add('playing'));
 audio.addEventListener('pause', () => ipod.classList.remove('playing'));
 audio.addEventListener('error', () => {
-  ipod.classList.remove('playing');
-  if (!audio.src) return;
-  if (streamCandidateIndex + 1 < streamCandidates.length) {
-    streamCandidateIndex += 1;
-    document.querySelector('#now-status').textContent = 'TRYING ANOTHER SIGNAL…';
-    audio.src = streamCandidates[streamCandidateIndex];
-    if (shouldBePlaying) audio.play().catch(() => {});
-    return;
-  }
-  document.querySelector('#now-status').textContent = 'UNSUPPORTED STREAM';
-  showToast('This station has no browser-compatible stream. Try another station.');
+  // While hls.js is attached, MSE failures also bubble to this event; its
+  // own Hls.Events.ERROR handler already drives cycling, so skip here to
+  // avoid double-advancing streamCandidateIndex for the same failure.
+  if (!audio.src || hls) return;
+  handleStreamError();
 });
 
 function updateClock() {

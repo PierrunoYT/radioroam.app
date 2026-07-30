@@ -8,6 +8,7 @@ Radio Roam is a web-based live radio player with an iPod-inspired interface. It 
 - Browse music, talk, sports, and nearby stations
 - Play, pause, mute, adjust volume, and move between stations
 - Fall back through multiple stream URLs when a station's first signal fails
+- Resolve `.pls`/`.m3u` playlist URLs into their direct streams server-side, and play `.m3u8` HLS streams client-side via [hls.js](https://github.com/video-dev/hls.js) where the browser lacks native support
 - Save favorite stations in browser local storage
 - Responsive interface with reduced-motion support
 
@@ -100,7 +101,9 @@ Radio.player/
 ├── requirements.txt       # Python dependencies
 ├── static/
 │   ├── app.css            # Responsive player styling
-│   └── app.js             # Search, playback, and favorites behavior
+│   ├── app.js             # Search, playback, and favorites behavior
+│   └── vendor/
+│       └── hls.light.min.js  # hls.js, loaded on demand for HLS-only stations
 ├── templates/
 │   ├── index.html         # Main player page
 │   └── legal.html         # Privacy/terms page template
@@ -152,5 +155,6 @@ and the relevant `functions/api/*.js` file so the two stay in sync.
 - Category listings are cached in memory for ten minutes, so repeated browsing does not re-query the API.
 - **Near me** infers the listener's country from the `Accept-Language` header, since Radio-Browser has no geo-targeted feed. It is a rough guess, and returns nothing when the browser sends no region subtag.
 - Stream availability and browser codec support vary by station. The app prioritizes HTTPS streams and common MP3, AAC, Ogg, and Opus formats, but some stations may still be unavailable.
+- `/api/stream/<id>` unwraps `.pls`/`.m3u` playlists into the stream URL(s) they list before returning them, since a browser can't play a playlist file directly. `.m3u8` is left alone when it looks like a genuine HLS manifest, since that one **is** playable — the client loads `static/vendor/hls.light.min.js` on demand for browsers without native HLS support (Safari has native support and skips it).
 - The built-in server is intended for local development, not production deployment. Debug mode is disabled by default and can be explicitly enabled with `FLASK_DEBUG=1`.
 - The application applies best-effort per-process API limits. Cloudflare deployments should also configure platform rate-limiting rules for globally consistent enforcement across Functions isolates.

@@ -1,4 +1,4 @@
-import { apiResponse, cached, getStreamUrl, jsonResponse, rateLimit } from '../../_lib/radio-browser.js';
+import { apiResponse, cached, getStreamCandidates, jsonResponse, rateLimit } from '../../_lib/radio-browser.js';
 
 export async function onRequestGet({ params, request }) {
   const limited = rateLimit(request, 'stream', 20);
@@ -8,11 +8,11 @@ export async function onRequestGet({ params, request }) {
   }
 
   return apiResponse(async () => {
-    const url = await cached(
+    const urls = await cached(
       `stream:${params.station_id}`,
-      () => getStreamUrl(params.station_id),
+      () => getStreamCandidates(params.station_id),
       30_000,
     );
-    return { url, urls: url ? [url] : [] };
+    return { url: urls[0] || null, urls };
   });
 }

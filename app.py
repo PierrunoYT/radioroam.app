@@ -105,16 +105,19 @@ class RadioBrowserAPI:
             f"json/stations/bycountrycodeexact/{quote(code, safe='')}", {"limit": limit}
         )
 
-    def get_stream_url(self, station_uuid: str) -> str | None:
-        """Resolve a station's current stream URL and register the play.
+    def get_stream_candidates(self, station_uuid: str) -> list[str]:
+        """Resolve a station's current stream URL(s) and register the play.
 
         Radio-Browser ranks stations by click count, so this endpoint is both
-        how you get a fresh URL and how you vote for the station.
+        how you get a fresh URL and how you vote for the station. The URL it
+        returns sometimes points at a playlist file rather than raw audio, so
+        unwrap that into the direct stream(s) it lists.
         """
         data = self._get(f"json/url/{quote(station_uuid, safe='')}")
         if str(data.get("ok")).lower() != "true":
-            return None
-        return safe_remote_url(data.get("url"))
+            return []
+        url = safe_remote_url(data.get("url"))
+        return resolve_stream_candidates(url) if url else []
 
 
 def safe_remote_url(value: Any) -> str | None:
@@ -128,6 +131,71 @@ def safe_remote_url(value: Any) -> str | None:
     if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
         return None
     return value.strip()
+
+
+# `.pls`/`.m3u` playlists point at a stream rather than being one, which a
+# plain <audio> element can't play. `.m3u8` is ambiguous: it is also the
+# extension HLS uses for its (playable, adaptive-bitrate) manifests, which
+# must be left untouched for the client's HLS support to load.
+PLAYLIST_SUFFIXES = (".pls", ".m3u", ".m3u8")
+MAX_PLAYLIST_BYTES = 64 * 1024
+HLS_MANIFEST_MARKERS = (
+    "#EXT-X-STREAM-INF",
+    "#EXT-X-TARGETDURATION",
+    "#EXT-X-MEDIA-SEQUENCE",
+    "#EXT-X-KEY",
+)
+
+
+def _playlist_suffix(url: str) -> str | None:
+    path = urlsplit(url).path.lower()
+    return next((suffix for suffix in PLAYLIST_SUFFIXES if path.endswith(suffix)), None)
+
+
+def _fetch_playlist_text(url: str) -> str | None:
+    try:
+        with requests.get(url, timeout=5, stream=True) as response:
+            response.raise_for_status()
+            body = bytearray()
+            for chunk in response.iter_content(chunk_size=4096):
+                body.extend(chunk)
+                if len(body) >= MAX_PLAYLIST_BYTES:
+                    break
+        return bytes(body).decode("utf-8", errors="ignore")
+    except requests.RequestException:
+        return None
+
+
+def _parse_pls_entries(text: str) -> list[str]:
+    return [entry.strip() for entry in re.findall(r"(?im)^File\d+\s*=\s*(.+)$", text)]
+
+
+def _parse_m3u_entries(text: str) -> list[str]:
+    return [line.strip() for line in text.splitlines() if line.strip() and not line.startswith("#")]
+
+
+def resolve_stream_candidates(url: str, depth: int = 0) -> list[str]:
+    """Unwrap a `.pls`/`.m3u` playlist into the direct stream(s) it lists."""
+    suffix = _playlist_suffix(url)
+    if depth >= 2 or not suffix:
+        return [url]
+
+    text = _fetch_playlist_text(url)
+    if text is None:
+        return [url]
+    if suffix == ".m3u8" and any(marker in text for marker in HLS_MANIFEST_MARKERS):
+        return [url]
+
+    entries = _parse_pls_entries(text) if suffix == ".pls" else _parse_m3u_entries(text)
+    resolved: list[str] = []
+    for entry in entries:
+        candidate = safe_remote_url(entry)
+        if not candidate:
+            continue
+        for nested in resolve_stream_candidates(candidate, depth + 1):
+            if nested not in resolved:
+                resolved.append(nested)
+    return resolved or [url]
 
 
 class TTLCache:
@@ -198,7 +266,7 @@ SECURITY_HEADERS = {
         "default-src 'self'; script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src https://fonts.gstatic.com; img-src 'self' data: https:; "
-        "media-src https: http:; connect-src 'self'; object-src 'none'; "
+        "media-src https: http: blob:; connect-src 'self' https: http:; object-src 'none'; "
         "base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     ),
     "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -328,8 +396,8 @@ def stream(station_id: str):
         return jsonify({"error": "Invalid station ID."}), 400
 
     def resolve_streams():
-        url = stream_cache.get_or_set(station_id, lambda: radio.get_stream_url(station_id))
-        return {"url": url, "urls": [url] if url else []}
+        urls = stream_cache.get_or_set(station_id, lambda: radio.get_stream_candidates(station_id))
+        return {"url": urls[0] if urls else None, "urls": urls}
 
     return api_response(resolve_streams)
 

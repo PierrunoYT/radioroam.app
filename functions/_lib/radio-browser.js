@@ -65,8 +65,28 @@ async function stations(path, params) {
   return payload.filter(item => item.stationuuid).map(toStation);
 }
 
-export function search(query, limit = 60) {
-  return stations('json/stations/search', { name: query, limit });
+// Radio-Browser's /search endpoint ANDs every field together, so a plain
+// name search misses stations that only match by country or state (e.g.
+// "Lucerne" or "Switzerland" won't surface Swiss stations whose names don't
+// contain those words). Query name/country/state independently and merge.
+export async function search(query, limit = 60) {
+  const perFieldLimit = limit * 2;
+  const results = await Promise.all([
+    stations('json/stations/search', { name: query, limit: perFieldLimit }),
+    stations('json/stations/search', { country: query, limit: perFieldLimit }),
+    stations('json/stations/search', { state: query, limit: perFieldLimit }),
+  ]);
+  const merged = [];
+  const seen = new Set();
+  for (const bucket of results) {
+    for (const item of bucket) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      merged.push(item);
+    }
+  }
+  merged.sort((a, b) => b.votes - a.votes);
+  return merged.slice(0, limit);
 }
 
 export function byTag(tag, limit = 60) {
@@ -78,10 +98,14 @@ export function byCountryCode(code, limit = 60) {
 }
 
 // Radio-Browser ranks stations by click count, so this endpoint is both how
-// you get a fresh URL and how you vote for the station.
-export async function getStreamUrl(stationUuid) {
+// you get a fresh URL and how you vote for the station. The URL it returns
+// sometimes points at a playlist file rather than raw audio, so unwrap that
+// into the direct stream(s) it lists.
+export async function getStreamCandidates(stationUuid) {
   const data = await get(`json/url/${encodeURIComponent(stationUuid)}`);
-  return String(data.ok).toLowerCase() === 'true' ? safeRemoteUrl(data.url) : null;
+  if (String(data.ok).toLowerCase() !== 'true') return [];
+  const url = safeRemoteUrl(data.url);
+  return url ? resolveStreamCandidates(url) : [];
 }
 
 export function safeRemoteUrl(value) {
@@ -92,6 +116,87 @@ export function safeRemoteUrl(value) {
   } catch {
     return null;
   }
+}
+
+// `.pls`/`.m3u` playlists point at a stream rather than being one, which a
+// plain <audio> element can't play. `.m3u8` is ambiguous: it is also the
+// extension HLS uses for its (playable, adaptive-bitrate) manifests, which
+// must be left untouched for the client's HLS support to load.
+const PLAYLIST_SUFFIXES = ['.pls', '.m3u', '.m3u8'];
+const MAX_PLAYLIST_BYTES = 64 * 1024;
+const HLS_MANIFEST_MARKERS = [
+  '#EXT-X-STREAM-INF',
+  '#EXT-X-TARGETDURATION',
+  '#EXT-X-MEDIA-SEQUENCE',
+  '#EXT-X-KEY',
+];
+
+function playlistSuffix(url) {
+  let path;
+  try {
+    path = new URL(url).pathname.toLowerCase();
+  } catch {
+    return null;
+  }
+  return PLAYLIST_SUFFIXES.find(suffix => path.endsWith(suffix)) || null;
+}
+
+async function fetchPlaylistText(url) {
+  try {
+    const response = await fetch(url, { headers: { 'User-Agent': 'RadioRoam/1.0' } });
+    if (!response.ok || !response.body) return null;
+    const reader = response.body.getReader();
+    const chunks = [];
+    let total = 0;
+    while (total < MAX_PLAYLIST_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      total += value.length;
+    }
+    reader.cancel().catch(() => {});
+    const limit = Math.min(total, MAX_PLAYLIST_BYTES);
+    const bytes = new Uint8Array(limit);
+    let offset = 0;
+    for (const chunk of chunks) {
+      const take = Math.min(chunk.length, limit - offset);
+      bytes.set(chunk.subarray(0, take), offset);
+      offset += take;
+      if (offset >= limit) break;
+    }
+    return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+function parsePlsEntries(text) {
+  return [...text.matchAll(/^File\d+\s*=\s*(.+)$/gim)].map(match => match[1].trim());
+}
+
+function parseM3uEntries(text) {
+  return text.split(/\r?\n/).map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+}
+
+// Unwrap a `.pls`/`.m3u` playlist into the direct stream(s) it lists.
+export async function resolveStreamCandidates(url, depth = 0) {
+  const suffix = playlistSuffix(url);
+  if (depth >= 2 || !suffix) return [url];
+
+  const text = await fetchPlaylistText(url);
+  if (text === null) return [url];
+  if (suffix === '.m3u8' && HLS_MANIFEST_MARKERS.some(marker => text.includes(marker))) return [url];
+
+  const entries = suffix === '.pls' ? parsePlsEntries(text) : parseM3uEntries(text);
+  const resolved = [];
+  for (const entry of entries) {
+    const candidate = safeRemoteUrl(entry);
+    if (!candidate) continue;
+    for (const nested of await resolveStreamCandidates(candidate, depth + 1)) {
+      if (!resolved.includes(nested)) resolved.push(nested);
+    }
+  }
+  return resolved.length ? resolved : [url];
 }
 
 // Tiny time-boxed cache so repeated browsing doesn't hammer the API. This
