@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import quote, urlsplit
 
 import requests
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 
 
 class StationNotFound(LookupError):
@@ -332,6 +332,11 @@ def privacy():
 @app.get("/terms")
 def terms():
     return render_template("legal.html", page="terms")
+
+
+@app.get("/sitemap.xml")
+def sitemap():
+    return send_from_directory("public", "sitemap.xml", mimetype="application/xml")
 
 
 @app.get("/api/search")
