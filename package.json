@@ -4,7 +4,9 @@
   "description": "Radio Roam is a web-based live radio player with an iPod-inspired interface. It uses the [Radio-Browser](https://www.radio-browser.info/) community directory to discover stations and resolve playable streams, while a lightweight Flask backend keeps external API requests and stream selection out of the browser.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "wrangler pages dev",
+    "deploy": "wrangler pages deploy"
   },
   "repository": {
     "type": "git",
