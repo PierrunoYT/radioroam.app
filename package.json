@@ -1,0 +1,28 @@
+{
+  "name": "radioroam.app",
+  "version": "1.0.0",
+  "description": "Radio Roam is a web-based live radio player with an iPod-inspired interface. It uses the [Radio-Browser](https://www.radio-browser.info/) community directory to discover stations and resolve playable streams, while a lightweight Flask backend keeps external API requests and stream selection out of the browser.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PierrunoYT/radioroam.app.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/PierrunoYT/radioroam.app/issues"
+  },
+  "homepage": "https://github.com/PierrunoYT/radioroam.app#readme",
+  "devDependencies": {
+    "wrangler": "^4.121.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260804.1": true
+  }
+}
