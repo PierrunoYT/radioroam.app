@@ -150,8 +150,26 @@ function playlistSuffix(url) {
   return PLAYLIST_SUFFIXES.find(suffix => path.endsWith(suffix)) || null;
 }
 
+// Playlist URLs come from third-party station data and are fetched
+// server-side, so refuse literal loopback, private and link-local targets.
+function isInternalHost(hostname) {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.internal') || host.endsWith('.local')) {
+    return true;
+  }
+  if (host.includes(':')) {
+    return host === '::1' || host === '::' || /^(fc|fd|fe80)/.test(host) || host.startsWith('::ffff:');
+  }
+  const octets = host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (!octets) return false;
+  const [a, b] = [Number(octets[1]), Number(octets[2])];
+  return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+}
+
 async function fetchPlaylistText(url) {
   try {
+    if (isInternalHost(new URL(url).hostname)) return null;
     const response = await fetch(url, {
       headers: { 'User-Agent': 'RadioRoam/1.0' },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
