@@ -4,6 +4,7 @@
 const HOSTS = ['https://all.api.radio-browser.info', 'https://de1.api.radio-browser.info'];
 const DEFAULTS = { hidebroken: 'true', order: 'clickcount', reverse: 'true' };
 const CACHE_TTL_MS = 10 * 60 * 1000;
+const FETCH_TIMEOUT_MS = 8000;
 const MAX_CACHE_ENTRIES = 512;
 const MAX_RATE_LIMIT_ENTRIES = 4096;
 const cache = new Map();
@@ -18,6 +19,7 @@ async function get(path, params = {}) {
     try {
       const response = await fetch(`${host}/${path.replace(/^\//, '')}?${query}`, {
         headers: { 'User-Agent': 'RadioRoam/1.0' },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       // A 404 is a definitive answer about the station, not a sick mirror,
       // so don't waste a retry on the next host.
@@ -150,7 +152,10 @@ function playlistSuffix(url) {
 
 async function fetchPlaylistText(url) {
   try {
-    const response = await fetch(url, { headers: { 'User-Agent': 'RadioRoam/1.0' } });
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'RadioRoam/1.0' },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
     if (!response.ok || !response.body) return null;
     const reader = response.body.getReader();
     const chunks = [];
