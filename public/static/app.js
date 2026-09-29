@@ -79,7 +79,7 @@ function updateThemeToggle() {
 themeToggle.addEventListener('click', () => {
   const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
   document.documentElement.dataset.theme = theme;
-  localStorage.setItem(themeKey, theme);
+  try { localStorage.setItem(themeKey, theme); } catch { /* storage unavailable */ }
   updateThemeToggle();
 });
 updateThemeToggle();
@@ -286,7 +286,11 @@ function toggleFavorite() {
     favorites.push(currentStation);
     showToast('Saved to favorites');
   }
-  localStorage.setItem(favoritesKey, JSON.stringify(favorites));
+  try {
+    localStorage.setItem(favoritesKey, JSON.stringify(favorites));
+  } catch {
+    showToast('Favorites could not be saved in this browser.');
+  }
   updatePlayer();
 }
 
