@@ -20,6 +20,7 @@ let streamCandidateIndex = -1;
 let shouldBePlaying = false;
 let hls = null;
 let hlsLoadPromise = null;
+let tuneRequest = 0;
 
 // `.m3u8` HLS streams need MediaSource-based playback; a plain <audio src>
 // can't decode the manifest. Safari plays it natively, so hls.js is only
@@ -194,8 +195,11 @@ async function selectStation(index, autoplay = true) {
   document.querySelectorAll('.station').forEach((node, nodeIndex) => node.classList.toggle('active', nodeIndex === index));
 
   document.querySelector('#now-status').textContent = 'TUNING…';
+  const request = ++tuneRequest;
   try {
     const data = await getJson(`/api/stream/${encodeURIComponent(station.id)}`);
+    // A newer selection superseded this one while it was loading.
+    if (request !== tuneRequest) return;
     const candidates = data.urls?.length ? data.urls : [data.url];
     streamCandidates = candidates.map(safeRemoteUrl).filter(Boolean);
     if (!streamCandidates.length) throw new Error('No playable stream was found.');
@@ -204,6 +208,7 @@ async function selectStation(index, autoplay = true) {
     await setSource(streamCandidates[streamCandidateIndex]);
     document.querySelector('#now-status').textContent = 'NOW BROADCASTING';
   } catch (error) {
+    if (request !== tuneRequest) return;
     document.querySelector('#now-status').textContent = 'OFF AIR';
     showToast(error.name === 'NotAllowedError' ? 'Press play to start listening.' : error.message);
   }
