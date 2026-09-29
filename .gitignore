@@ -6,3 +6,5 @@ venv/
 
 node_modules/
 .wrangler/
+
+.code_index/
