@@ -197,6 +197,13 @@ h1 em { font-family: "Fraunces", serif; font-weight: 500; color: var(--orange); 
 .footer-bottom a { color: var(--muted); font-size: inherit; }
 .footer-bottom > span:last-child { justify-self: end; }
 
+.about { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: clamp(32px, 6vw, 90px); padding: 64px 0 72px; border-top: 1px solid var(--line); }
+.about h2 { margin: 0 0 16px; font-size: clamp(26px, 3vw, 34px); letter-spacing: -1.2px; line-height: 1.1; font-weight: 600; }
+.about p:not(.eyebrow) { color: var(--muted); font-size: 13px; line-height: 1.75; margin: 0; }
+.about a { color: var(--orange); }
+.faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 36px; }
+.faq h3 { margin: 0 0 8px; font-size: 14px; letter-spacing: -.2px; }
+
 .back-home { justify-self: end; color: var(--ink); font-size: 11px; font-weight: 600; text-decoration: none; }
 .back-home:hover { color: var(--orange); }
 .legal-content { width: min(720px, 100%); margin: 0 auto; padding: 88px 0 100px; }
@@ -214,6 +221,7 @@ h1 em { font-family: "Fraunces", serif; font-weight: 500; color: var(--orange); 
 @keyframes meter { from { height: 3px; } to { height: 17px; } }
 
 @media (max-width: 900px) {
+  .about { grid-template-columns: 1fr; }
   .hero { grid-template-columns: minmax(0, 1fr); padding-top: 42px; }
   .intro { max-width: none; }
   .player-stage { min-width: 0; }
@@ -222,6 +230,7 @@ h1 em { font-family: "Fraunces", serif; font-weight: 500; color: var(--orange); 
 }
 
 @media (max-width: 520px) {
+  .faq { grid-template-columns: 1fr; }
   .app-shell { width: min(100% - 28px, 460px); }
   .topbar { height: 72px; }
   .brand { font-size: 18px; gap: 8px; }

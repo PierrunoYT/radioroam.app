@@ -4,13 +4,60 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#e9e6e1">
-    <meta name="description" content="Radio Roam — discover live radio stations from around the world.">
+    <meta name="description" content="Listen to free live radio online. Radio Roam streams 30,000+ radio stations from around the world: music, news, talk and sports. No sign-up, no app needed.">
     <link rel="canonical" href="https://radioroam.app/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Radio Roam">
+    <meta property="og:url" content="https://radioroam.app/">
+    <meta property="og:title" content="Radio Roam — Free Live Radio from Around the World">
+    <meta property="og:description" content="Listen to free live radio online. Radio Roam streams 30,000+ radio stations from around the world: music, news, talk and sports. No sign-up, no app needed.">
+    <meta property="og:image" content="https://radioroam.app/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Radio Roam — the world on shuffle">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Radio Roam — Free Live Radio from Around the World">
+    <meta name="twitter:description" content="Listen to free live radio online. Radio Roam streams 30,000+ radio stations from around the world: music, news, talk and sports. No sign-up, no app needed.">
+    <meta name="twitter:image" content="https://radioroam.app/og-image.png">
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://radioroam.app/#website",
+            "name": "Radio Roam",
+            "url": "https://radioroam.app/",
+            "description": "Free live online radio from around the world."
+          },
+          {
+            "@type": "WebApplication",
+            "name": "Radio Roam",
+            "url": "https://radioroam.app/",
+            "applicationCategory": "MultimediaApplication",
+            "operatingSystem": "Any",
+            "browserRequirements": "Requires a modern web browser",
+            "description": "Listen to free live radio online. Radio Roam streams 30,000+ radio stations from around the world: music, news, talk and sports. No sign-up, no app needed.",
+            "image": "https://radioroam.app/og-image.png",
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              { "@type": "Question", "name": "Is Radio Roam free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Radio Roam is completely free, with no account, subscription or download required." } },
+              { "@type": "Question", "name": "Where do the radio stations come from?", "acceptedAnswer": { "@type": "Answer", "text": "Stations come from Radio-Browser, a community-maintained directory of more than 30,000 internet radio stations worldwide." } },
+              { "@type": "Question", "name": "Can I listen to local radio stations?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Choose Near me to see stations from your country, or search by city, region or country name." } },
+              { "@type": "Question", "name": "Does Radio Roam work on my phone?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Radio Roam runs in any modern browser on phones, tablets and computers, and can be added to your home screen." } }
+            ]
+          }
+        ]
+      }
+    </script>
     <link rel="icon" href="/favicon.ico" sizes="48x48">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link rel="manifest" href="/site.webmanifest">
-    <title>Radio Roam — The world on shuffle</title>
+    <title>Radio Roam — Free Live Online Radio from Around the World</title>
     <script>
       (() => {
         let savedTheme = null;
@@ -19,7 +66,7 @@
         document.documentElement.dataset.theme = theme;
       })();
     </script>
-    <link rel="stylesheet" href="/static/app.css?v=20260730-3">
+    <link rel="stylesheet" href="/static/app.css?v=20261025-1">
   </head>
   <body>
     <div class="ambient ambient-one"></div>
@@ -47,7 +94,7 @@
         <div class="intro">
           <p class="eyebrow">Live from everywhere</p>
           <h1>Turn the dial.<br><em>Find your frequency.</em></h1>
-          <p class="lede">Thousands of stations, one beautifully simple player. Search by city, station, artist, or whatever you feel like hearing.</p>
+          <p class="lede">Listen to free live radio from 30,000+ stations worldwide in one beautifully simple player. Search by city, country, station or genre, no sign-up needed.</p>
 
           <form class="search" id="search-form">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.4-4.4m2.4-5.1a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z"/></svg>
@@ -111,6 +158,32 @@
             <div class="dock-slot"></div>
           </article>
           <p class="hint">Pick a station and press play</p>
+        </div>
+      </section>
+
+      <section class="about" aria-labelledby="about-title">
+        <div class="about-intro">
+          <p class="eyebrow">About Radio Roam</p>
+          <h2 id="about-title">Free online radio from every corner of the world</h2>
+          <p>Radio Roam is a free internet radio player that brings live stations from more than 200 countries into one place. Tune in to pop, rock, jazz, electronic and classical music, catch up on news and talk radio, or follow live sports commentary, straight from your browser.</p>
+        </div>
+        <div class="faq">
+          <div>
+            <h3>Is Radio Roam free?</h3>
+            <p>Yes. Radio Roam is completely free, with no account, subscription or download required.</p>
+          </div>
+          <div>
+            <h3>Where do the radio stations come from?</h3>
+            <p>Stations come from <a href="https://www.radio-browser.info/" rel="noopener">Radio-Browser</a>, a community-maintained directory of more than 30,000 internet radio stations worldwide.</p>
+          </div>
+          <div>
+            <h3>Can I listen to local radio stations?</h3>
+            <p>Yes. Choose <em>Near me</em> to see stations from your country, or search by city, region or country name.</p>
+          </div>
+          <div>
+            <h3>Does Radio Roam work on my phone?</h3>
+            <p>Yes. Radio Roam runs in any modern browser on phones, tablets and computers, and can be added to your home screen.</p>
+          </div>
         </div>
       </section>
 
