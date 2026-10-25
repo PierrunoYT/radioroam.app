@@ -71,7 +71,7 @@ async function stations(path, params) {
 // case-sensitive against the stored country name (e.g. "switzerland" matches
 // nothing, only "Switzerland" does), so title-case the query before using it.
 function titleCase(value) {
-  return value.replace(/\w\S*/g, word => word[0].toUpperCase() + word.slice(1).toLowerCase());
+  return value.toLowerCase().replace(/(^|\s)(\S)/gu, (_match, space, letter) => space + letter.toUpperCase());
 }
 
 // Radio-Browser's /search endpoint ANDs every field together, so a plain
@@ -80,11 +80,14 @@ function titleCase(value) {
 // contain those words). Query name/country/state independently and merge.
 export async function search(query, limit = 200) {
   const perFieldLimit = limit * 2;
-  const results = await Promise.all([
+  const settled = await Promise.allSettled([
     stations('json/stations/search', { name: query, limit: perFieldLimit }),
     stations('json/stations/search', { country: titleCase(query), limit: perFieldLimit }),
     stations('json/stations/search', { state: query, limit: perFieldLimit }),
   ]);
+  // One flaky field query shouldn't sink the whole search; fail only if all do.
+  const results = settled.filter(result => result.status === 'fulfilled').map(result => result.value);
+  if (!results.length) throw settled[0].reason;
   const merged = [];
   const seen = new Set();
   for (const bucket of results) {

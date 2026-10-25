@@ -21,6 +21,7 @@ let shouldBePlaying = false;
 let hls = null;
 let hlsLoadPromise = null;
 let tuneRequest = 0;
+let listRequest = 0;
 
 // `.m3u8` HLS streams need MediaSource-based playback; a plain <audio src>
 // can't decode the manifest. Safari plays it natively, so hls.js is only
@@ -147,7 +148,10 @@ function stationNode(station, index) {
 }
 
 function renderStations(items, title = 'On the air') {
+  listRequest += 1;
   stations = Array.isArray(items) ? items.filter(station => station?.id) : [];
+  // Keep prev/next anchored to the playing station within the new list.
+  currentIndex = stations.findIndex(station => station.id === currentStation?.id);
   document.querySelector('#results-title').textContent = title;
   document.querySelector('#results-count').textContent = `${stations.length} stations`;
   if (!stations.length) {
@@ -161,28 +165,32 @@ function renderStations(items, title = 'On the air') {
   list.replaceChildren(...stations.map(stationNode));
 }
 
+// Returns a token; a list fetch should only render if it is still current.
 function setLoading() {
   const loading = document.createElement('div');
   loading.className = 'loading-state';
   loading.append(document.createElement('span'), document.createElement('span'), document.createElement('span'));
   list.replaceChildren(loading);
   document.querySelector('#results-count').textContent = '';
+  return ++listRequest;
 }
 
 async function getJson(url) {
   const response = await fetch(url);
-  const data = await response.json();
+  // An edge error page is HTML, not JSON, so don't surface a parser error.
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || 'Something went wrong.');
   return data;
 }
 
 async function browse(category = 'music') {
-  setLoading();
+  const request = setLoading();
   try {
     const items = await getJson(`/api/browse?category=${encodeURIComponent(category)}`);
+    if (request !== listRequest) return;
     renderStations(items, category === 'local' ? 'Near you' : `${category} radio`);
   } catch (error) {
-    showError(error.message);
+    if (request === listRequest) showError(error.message);
   }
 }
 
@@ -326,10 +334,13 @@ document.querySelector('#search-form').addEventListener('submit', async event =>
   const query = document.querySelector('#search-input').value.trim();
   if (!query) return;
   document.querySelectorAll('.category').forEach(button => button.classList.remove('active'));
-  setLoading();
+  const request = setLoading();
   try {
-    renderStations(await getJson(`/api/search?q=${encodeURIComponent(query)}`), `Results for “${query}”`);
-  } catch (error) { showError(error.message); }
+    const items = await getJson(`/api/search?q=${encodeURIComponent(query)}`);
+    if (request === listRequest) renderStations(items, `Results for “${query}”`);
+  } catch (error) {
+    if (request === listRequest) showError(error.message);
+  }
 });
 
 document.querySelector('.categories').addEventListener('click', event => {

@@ -12,7 +12,8 @@
     <title>Page not found — Radio Roam</title>
     <script>
       (() => {
-        const savedTheme = localStorage.getItem('radio-roam-theme');
+        let savedTheme = null;
+        try { savedTheme = localStorage.getItem('radio-roam-theme'); } catch { /* storage unavailable */ }
         const theme = savedTheme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         document.documentElement.dataset.theme = theme;
       })();
